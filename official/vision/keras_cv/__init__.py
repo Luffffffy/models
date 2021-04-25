@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,8 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Keras-CV package definition."""
 # pylint: disable=wildcard-import
-from official.vision.keras_cv.losses import *
-from official.vision.keras_cv.ops import *
+from official.vision.keras_cv import layers
+from official.vision.keras_cv import losses
+from official.vision.keras_cv import metrics
+from official.vision.keras_cv import ops

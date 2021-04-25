@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Tests for official.nlp.data.data_loader_factory."""
 
 import dataclasses
 import tensorflow as tf
 
-from official.modeling.hyperparams import config_definitions as cfg
+from official.core import config_definitions as cfg
 from official.nlp.data import data_loader_factory
 
 

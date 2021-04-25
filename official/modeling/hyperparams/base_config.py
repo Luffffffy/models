@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,12 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Base configurations to standardize experiments."""
 
 import copy
 import functools
 from typing import Any, List, Mapping, Optional, Type
+from absl import logging
 
 import dataclasses
 import tensorflow as tf
@@ -29,11 +30,15 @@ from official.modeling.hyperparams import params_dict
 class Config(params_dict.ParamsDict):
   """The base configuration class that supports YAML/JSON based overrides.
 
-  * It recursively enforces a whitelist of basic types and container types, so
+  Because of YAML/JSON serialization limitations, some semantics of dataclass
+  are not supported:
+  * It recursively enforces a allowlist of basic types and container types, so
     it avoids surprises with copy and reuse caused by unanticipated types.
-  * It converts dict to Config even within sequences,
+  * Warning: it converts Dict to `Config` even within sequences,
     e.g. for config = Config({'key': [([{'a': 42}],)]),
          type(config.key[0][0][0]) is Config rather than dict.
+    If you define/annotate some field as Dict, the field will convert to a
+    `Config` instance and lose the dictionary type.
   """
 
   # It's safe to add bytes and other immutable types here.
@@ -155,13 +160,32 @@ class Config(params_dict.ParamsDict):
       RuntimeError
     """
     subconfig_type = self._get_subconfig_type(k)
-    if isinstance(v, dict):
+
+    def is_null(k):
       if k not in self.__dict__ or not self.__dict__[k]:
+        return True
+      return False
+
+    if isinstance(v, dict):
+      if is_null(k):
         # If the key not exist or the value is None, a new Config-family object
         # sould be created for the key.
         self.__dict__[k] = subconfig_type(v)
       else:
         self.__dict__[k].override(v)
+    elif not is_null(k) and isinstance(v, self.SEQUENCE_TYPES) and all(
+        [not isinstance(e, self.IMMUTABLE_TYPES) for e in v]):
+      if len(self.__dict__[k]) == len(v):
+        for i in range(len(v)):
+          self.__dict__[k][i].override(v[i])
+      elif not all([isinstance(e, self.IMMUTABLE_TYPES) for e in v]):
+        logging.warning(
+            "The list/tuple don't match the value dictionaries provided. Thus, "
+            'the list/tuple is determined by the type annotation and '
+            'values provided. This is error-prone.')
+        self.__dict__[k] = self._import_config(v, subconfig_type)
+      else:
+        self.__dict__[k] = self._import_config(v, subconfig_type)
     else:
       self.__dict__[k] = self._import_config(v, subconfig_type)
 

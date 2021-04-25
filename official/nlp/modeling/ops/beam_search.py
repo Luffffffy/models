@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Beam search to find the translated sequence with the highest probability."""
 
 import numpy as np
@@ -188,8 +188,8 @@ class SequenceBeamSearch(tf.Module):
             tf.slice(alive_seq, [0, 0, i], [batch_size, self.beam_size, 1]),
             [batch_size * self.beam_size, -1])
       else:
-        flat_ids = _flatten_beam_dim(alive_seq)  # [batch_size * beam_size]
-      flat_cache = tf.nest.map_structure(_flatten_beam_dim, alive_cache)
+        flat_ids = flatten_beam_dim(alive_seq)  # [batch_size * beam_size]
+      flat_cache = tf.nest.map_structure(flatten_beam_dim, alive_cache)
 
       flat_logits, flat_cache = self.symbols_to_logits_fn(
           flat_ids, i, flat_cache)
@@ -398,13 +398,13 @@ class SequenceBeamSearch(tf.Module):
           raise TypeError(
               "initial_cache element for key '%s' has dtype %s that does not "
               "match SequenceBeamSearch's dtype of %s. Value: %s" %
-              (key, value.dtype.name, self.dtype.name, inner_value))
+              (key, inner_value.dtype.name, self.dtype.name, inner_value))
 
     # Current loop index (starts at 0)
     cur_index = tf.constant(0)
 
     # Create alive sequence with shape [batch_size, beam_size, 1]
-    alive_seq = _expand_to_beam_size(initial_ids, self.beam_size)
+    alive_seq = expand_to_beam_size(initial_ids, self.beam_size)
     alive_seq = tf.expand_dims(alive_seq, axis=2)
     if self.padded_decode:
       alive_seq = tf.tile(alive_seq, [1, 1, self.max_decode_length + 1])
@@ -419,7 +419,7 @@ class SequenceBeamSearch(tf.Module):
     # Expand all values stored in the dictionary to the beam size, so that each
     # beam has a separate cache.
     alive_cache = tf.nest.map_structure(
-        lambda t: _expand_to_beam_size(t, self.beam_size), initial_cache)
+        lambda t: expand_to_beam_size(t, self.beam_size), initial_cache)
 
     # Initialize tensor storing finished sequences with filler values.
     finished_seq = tf.zeros(tf.shape(alive_seq), tf.int32)
@@ -514,7 +514,11 @@ class SequenceBeamSearch(tf.Module):
     max_length_norm = _length_normalization(
         self.alpha, self.max_decode_length, dtype=self.dtype)
     # Get the best possible scores from alive sequences.
-    best_alive_scores = alive_log_probs[:, 0] / max_length_norm
+    # This tf.slice/tf.squeeze is equivalent to alive_log_probs[:, 0] which
+    # emits a tf.strided_slice. tf.slice is easier to reason about as we aren't
+    # actually taking a non trivial stride.
+    best_alive_scores = tf.squeeze(tf.slice(alive_log_probs, [0, 0], [-1, 1]),
+                                   axis=1) / max_length_norm
 
     # Compute worst score in finished sequences for each batch element
     finished_scores *= tf.cast(finished_flags,
@@ -588,7 +592,7 @@ def _length_normalization(alpha, length, dtype=tf.float32):
   return tf.pow(((5. + tf.cast(length, dtype)) / 6.), alpha)
 
 
-def _expand_to_beam_size(tensor, beam_size):
+def expand_to_beam_size(tensor, beam_size):
   """Tiles a given tensor by beam_size.
 
   Args:
@@ -603,6 +607,21 @@ def _expand_to_beam_size(tensor, beam_size):
   tile_dims[1] = beam_size
 
   return tf.tile(tensor, tile_dims)
+
+
+def flatten_beam_dim(tensor):
+  """Reshapes first two dimensions into a single dimension.
+
+  Args:
+    tensor: Tensor to reshape of shape [A, B, ...]
+
+  Returns:
+    Reshaped tensor of shape [A*B, ...]
+  """
+  shape = _shape_list(tensor)
+  shape[0] *= shape[1]
+  shape.pop(1)  # Remove beam dim
+  return tf.reshape(tensor, shape)
 
 
 def _shape_list(tensor):
@@ -628,21 +647,6 @@ def _get_shape_keep_last_dim(tensor):
   if isinstance(shape_list[-1], tf.Tensor):
     shape_list[-1] = None
   return tf.TensorShape(shape_list)
-
-
-def _flatten_beam_dim(tensor):
-  """Reshapes first two dimensions in to single dimension.
-
-  Args:
-    tensor: Tensor to reshape of shape [A, B, ...]
-
-  Returns:
-    Reshaped tensor of shape [A*B, ...]
-  """
-  shape = _shape_list(tensor)
-  shape[0] *= shape[1]
-  shape.pop(1)  # Remove beam dim
-  return tf.reshape(tensor, shape)
 
 
 def _unflatten_beam_dim(tensor, batch_size, beam_size):

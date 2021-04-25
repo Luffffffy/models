@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Runs a ResNet model on the ImageNet dataset using custom training loops."""
 
 import orbit
@@ -42,7 +42,7 @@ class ResnetRunnable(orbit.StandardTrainer, orbit.StandardEvaluator):
               self.strategy.num_replicas_in_sync))
 
     # As auto rebatching is not supported in
-    # `experimental_distribute_datasets_from_function()` API, which is
+    # `distribute_datasets_from_function()` API, which is
     # required when cloning dataset to multiple workers in eager mode,
     # we use per-replica batch size.
     self.batch_size = int(batch_size / self.strategy.num_replicas_in_sync)

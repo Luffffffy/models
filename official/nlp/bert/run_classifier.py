@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """BERT classification or regression finetuning runner in TF 2.x."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import functools
 import json
@@ -222,8 +219,8 @@ def run_keras_compile_fit(model_dir,
     optimizer = bert_model.optimizer
 
     if init_checkpoint:
-      checkpoint = tf.train.Checkpoint(model=sub_model)
-      checkpoint.restore(init_checkpoint).assert_existing_objects_matched()
+      checkpoint = tf.train.Checkpoint(model=sub_model, encoder=sub_model)
+      checkpoint.read(init_checkpoint).assert_existing_objects_matched()
 
     if not isinstance(metric_fn, (list, tuple)):
       metric_fn = [metric_fn]
@@ -231,7 +228,7 @@ def run_keras_compile_fit(model_dir,
         optimizer=optimizer,
         loss=loss_fn,
         metrics=[fn() for fn in metric_fn],
-        experimental_steps_per_execution=steps_per_loop)
+        steps_per_execution=steps_per_loop)
 
     summary_dir = os.path.join(model_dir, 'summaries')
     summary_callback = tf.keras.callbacks.TensorBoard(summary_dir)
@@ -325,8 +322,7 @@ def get_predictions_and_labels(strategy,
       tf.experimental.async_clear_error()
     return preds, golds
 
-  test_iter = iter(
-      strategy.experimental_distribute_datasets_from_function(eval_input_fn))
+  test_iter = iter(strategy.distribute_datasets_from_function(eval_input_fn))
   predictions, labels = _run_evaluation(test_iter)
 
   return predictions, labels
@@ -352,7 +348,7 @@ def export_classifier(model_export_path, input_meta_data, bert_config,
     raise ValueError('Export path is not specified: %s' % model_dir)
 
   # Export uses float32 for now, even if training uses mixed precision.
-  tf.keras.mixed_precision.experimental.set_policy('float32')
+  tf.keras.mixed_precision.set_global_policy('float32')
   classifier_model = bert_models.classifier_model(
       bert_config,
       input_meta_data.get('num_labels', 1),

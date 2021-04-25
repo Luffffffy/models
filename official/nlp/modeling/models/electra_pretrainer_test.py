@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,12 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
-"""Tests for ELECTRA pre trainer network."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""Tests for ELECTRA pre trainer network."""
 
 import tensorflow as tf
 
@@ -38,11 +34,13 @@ class ElectraPretrainerTest(keras_parameterized.TestCase):
     test_generator_network = networks.BertEncoder(
         vocab_size=vocab_size,
         num_layers=2,
-        max_sequence_length=sequence_length)
+        max_sequence_length=sequence_length,
+        dict_outputs=True)
     test_discriminator_network = networks.BertEncoder(
         vocab_size=vocab_size,
         num_layers=2,
-        max_sequence_length=sequence_length)
+        max_sequence_length=sequence_length,
+        dict_outputs=True)
 
     # Create a ELECTRA trainer with the created network.
     num_classes = 3
@@ -92,9 +90,9 @@ class ElectraPretrainerTest(keras_parameterized.TestCase):
     # Build a transformer network to use within the ELECTRA trainer. (Here, we
     # use a short sequence_length for convenience.)
     test_generator_network = networks.BertEncoder(
-        vocab_size=100, num_layers=4, max_sequence_length=3)
+        vocab_size=100, num_layers=4, max_sequence_length=3, dict_outputs=True)
     test_discriminator_network = networks.BertEncoder(
-        vocab_size=100, num_layers=4, max_sequence_length=3)
+        vocab_size=100, num_layers=4, max_sequence_length=3, dict_outputs=True)
 
     # Create a ELECTRA trainer with the created network.
     eletrca_trainer_model = electra_pretrainer.ElectraPretrainer(

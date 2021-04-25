@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Contains common building blocks for neural networks."""
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, Text
 
 # Import libraries
-
+from absl import logging
 import tensorflow as tf
 
 from official.modeling import tf_utils
@@ -62,6 +62,8 @@ class ResidualBlock(tf.keras.layers.Layer):
                filters,
                strides,
                use_projection=False,
+               se_ratio=None,
+               resnetd_shortcut=False,
                stochastic_depth_drop_rate=None,
                kernel_initializer='VarianceScaling',
                kernel_regularizer=None,
@@ -71,36 +73,41 @@ class ResidualBlock(tf.keras.layers.Layer):
                norm_momentum=0.99,
                norm_epsilon=0.001,
                **kwargs):
-    """A residual block with BN after convolutions.
+    """Initializes a residual block with BN after convolutions.
 
     Args:
-      filters: `int` number of filters for the first two convolutions. Note that
-        the third and final convolution will use 4 times as many filters.
-      strides: `int` block stride. If greater than 1, this block will ultimately
-        downsample the input.
-      use_projection: `bool` for whether this block should use a projection
+      filters: An `int` number of filters for the first two convolutions. Note
+        that the third and final convolution will use 4 times as many filters.
+      strides: An `int` block stride. If greater than 1, this block will
+        ultimately downsample the input.
+      use_projection: A `bool` for whether this block should use a projection
         shortcut (versus the default identity shortcut). This is usually `True`
         for the first block of a block group, which may change the number of
         filters and the resolution.
-      stochastic_depth_drop_rate: `float` or None. if not None, drop rate for
+      se_ratio: A `float` or None. Ratio of the Squeeze-and-Excitation layer.
+      resnetd_shortcut: A `bool` if True, apply the resnetd style modification
+        to the shortcut connection. Not implemented in residual blocks.
+      stochastic_depth_drop_rate: A `float` or None. if not None, drop rate for
         the stochastic depth layer.
-      kernel_initializer: kernel_initializer for convolutional layers.
-      kernel_regularizer: tf.keras.regularizers.Regularizer object for Conv2D.
-                          Default to None.
-      bias_regularizer: tf.keras.regularizers.Regularizer object for Conv2d.
-                        Default to None.
-      activation: `str` name of the activation function.
-      use_sync_bn: if True, use synchronized batch normalization.
-      norm_momentum: `float` normalization omentum for the moving average.
-      norm_epsilon: `float` small float added to variance to avoid dividing by
-        zero.
-      **kwargs: keyword arguments to be passed.
+      kernel_initializer: A `str` of kernel_initializer for convolutional
+        layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+        Conv2D. Default to None.
+      bias_regularizer: A `tf.keras.regularizers.Regularizer` object for Conv2d.
+        Default to None.
+      activation: A `str` name of the activation function.
+      use_sync_bn: A `bool`. If True, use synchronized batch normalization.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      **kwargs: Additional keyword arguments to be passed.
     """
     super(ResidualBlock, self).__init__(**kwargs)
 
     self._filters = filters
     self._strides = strides
     self._use_projection = use_projection
+    self._se_ratio = se_ratio
+    self._resnetd_shortcut = resnetd_shortcut
     self._use_sync_bn = use_sync_bn
     self._activation = activation
     self._stochastic_depth_drop_rate = stochastic_depth_drop_rate
@@ -163,6 +170,17 @@ class ResidualBlock(tf.keras.layers.Layer):
         momentum=self._norm_momentum,
         epsilon=self._norm_epsilon)
 
+    if self._se_ratio and self._se_ratio > 0 and self._se_ratio <= 1:
+      self._squeeze_excitation = nn_layers.SqueezeExcitation(
+          in_filters=self._filters,
+          out_filters=self._filters,
+          se_ratio=self._se_ratio,
+          kernel_initializer=self._kernel_initializer,
+          kernel_regularizer=self._kernel_regularizer,
+          bias_regularizer=self._bias_regularizer)
+    else:
+      self._squeeze_excitation = None
+
     if self._stochastic_depth_drop_rate:
       self._stochastic_depth = nn_layers.StochasticDepth(
           self._stochastic_depth_drop_rate)
@@ -176,6 +194,8 @@ class ResidualBlock(tf.keras.layers.Layer):
         'filters': self._filters,
         'strides': self._strides,
         'use_projection': self._use_projection,
+        'se_ratio': self._se_ratio,
+        'resnetd_shortcut': self._resnetd_shortcut,
         'stochastic_depth_drop_rate': self._stochastic_depth_drop_rate,
         'kernel_initializer': self._kernel_initializer,
         'kernel_regularizer': self._kernel_regularizer,
@@ -201,6 +221,9 @@ class ResidualBlock(tf.keras.layers.Layer):
     x = self._conv2(x)
     x = self._norm2(x)
 
+    if self._squeeze_excitation:
+      x = self._squeeze_excitation(x)
+
     if self._stochastic_depth:
       x = self._stochastic_depth(x, training=training)
 
@@ -214,7 +237,10 @@ class BottleneckBlock(tf.keras.layers.Layer):
   def __init__(self,
                filters,
                strides,
+               dilation_rate=1,
                use_projection=False,
+               se_ratio=None,
+               resnetd_shortcut=False,
                stochastic_depth_drop_rate=None,
                kernel_initializer='VarianceScaling',
                kernel_regularizer=None,
@@ -224,36 +250,43 @@ class BottleneckBlock(tf.keras.layers.Layer):
                norm_momentum=0.99,
                norm_epsilon=0.001,
                **kwargs):
-    """A standard bottleneck block with BN after convolutions.
+    """Initializes a standard bottleneck block with BN after convolutions.
 
     Args:
-      filters: `int` number of filters for the first two convolutions. Note that
-        the third and final convolution will use 4 times as many filters.
-      strides: `int` block stride. If greater than 1, this block will ultimately
-        downsample the input.
-      use_projection: `bool` for whether this block should use a projection
+      filters: An `int` number of filters for the first two convolutions. Note
+        that the third and final convolution will use 4 times as many filters.
+      strides: An `int` block stride. If greater than 1, this block will
+        ultimately downsample the input.
+      dilation_rate: An `int` dilation_rate of convolutions. Default to 1.
+      use_projection: A `bool` for whether this block should use a projection
         shortcut (versus the default identity shortcut). This is usually `True`
         for the first block of a block group, which may change the number of
         filters and the resolution.
-      stochastic_depth_drop_rate: `float` or None. if not None, drop rate for
+      se_ratio: A `float` or None. Ratio of the Squeeze-and-Excitation layer.
+      resnetd_shortcut: A `bool`. If True, apply the resnetd style modification
+        to the shortcut connection.
+      stochastic_depth_drop_rate: A `float` or None. If not None, drop rate for
         the stochastic depth layer.
-      kernel_initializer: kernel_initializer for convolutional layers.
-      kernel_regularizer: tf.keras.regularizers.Regularizer object for Conv2D.
-                          Default to None.
-      bias_regularizer: tf.keras.regularizers.Regularizer object for Conv2d.
-                        Default to None.
-      activation: `str` name of the activation function.
-      use_sync_bn: if True, use synchronized batch normalization.
-      norm_momentum: `float` normalization omentum for the moving average.
-      norm_epsilon: `float` small float added to variance to avoid dividing by
-        zero.
-      **kwargs: keyword arguments to be passed.
+      kernel_initializer: A `str` of kernel_initializer for convolutional
+        layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+        Conv2D. Default to None.
+      bias_regularizer: A `tf.keras.regularizers.Regularizer` object for Conv2d.
+        Default to None.
+      activation: A `str` name of the activation function.
+      use_sync_bn: A `bool`. If True, use synchronized batch normalization.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      **kwargs: Additional keyword arguments to be passed.
     """
     super(BottleneckBlock, self).__init__(**kwargs)
 
     self._filters = filters
     self._strides = strides
+    self._dilation_rate = dilation_rate
     self._use_projection = use_projection
+    self._se_ratio = se_ratio
+    self._resnetd_shortcut = resnetd_shortcut
     self._use_sync_bn = use_sync_bn
     self._activation = activation
     self._stochastic_depth_drop_rate = stochastic_depth_drop_rate
@@ -270,18 +303,30 @@ class BottleneckBlock(tf.keras.layers.Layer):
       self._bn_axis = -1
     else:
       self._bn_axis = 1
-    self._activation_fn = tf_utils.get_activation(activation)
 
   def build(self, input_shape):
     if self._use_projection:
-      self._shortcut = tf.keras.layers.Conv2D(
-          filters=self._filters * 4,
-          kernel_size=1,
-          strides=self._strides,
-          use_bias=False,
-          kernel_initializer=self._kernel_initializer,
-          kernel_regularizer=self._kernel_regularizer,
-          bias_regularizer=self._bias_regularizer)
+      if self._resnetd_shortcut:
+        self._shortcut0 = tf.keras.layers.AveragePooling2D(
+            pool_size=2, strides=self._strides, padding='same')
+        self._shortcut1 = tf.keras.layers.Conv2D(
+            filters=self._filters * 4,
+            kernel_size=1,
+            strides=1,
+            use_bias=False,
+            kernel_initializer=self._kernel_initializer,
+            kernel_regularizer=self._kernel_regularizer,
+            bias_regularizer=self._bias_regularizer)
+      else:
+        self._shortcut = tf.keras.layers.Conv2D(
+            filters=self._filters * 4,
+            kernel_size=1,
+            strides=self._strides,
+            use_bias=False,
+            kernel_initializer=self._kernel_initializer,
+            kernel_regularizer=self._kernel_regularizer,
+            bias_regularizer=self._bias_regularizer)
+
       self._norm0 = self._norm(
           axis=self._bn_axis,
           momentum=self._norm_momentum,
@@ -299,11 +344,14 @@ class BottleneckBlock(tf.keras.layers.Layer):
         axis=self._bn_axis,
         momentum=self._norm_momentum,
         epsilon=self._norm_epsilon)
+    self._activation1 = tf_utils.get_activation(
+        self._activation, use_keras_layer=True)
 
     self._conv2 = tf.keras.layers.Conv2D(
         filters=self._filters,
         kernel_size=3,
         strides=self._strides,
+        dilation_rate=self._dilation_rate,
         padding='same',
         use_bias=False,
         kernel_initializer=self._kernel_initializer,
@@ -313,6 +361,8 @@ class BottleneckBlock(tf.keras.layers.Layer):
         axis=self._bn_axis,
         momentum=self._norm_momentum,
         epsilon=self._norm_epsilon)
+    self._activation2 = tf_utils.get_activation(
+        self._activation, use_keras_layer=True)
 
     self._conv3 = tf.keras.layers.Conv2D(
         filters=self._filters * 4,
@@ -326,12 +376,26 @@ class BottleneckBlock(tf.keras.layers.Layer):
         axis=self._bn_axis,
         momentum=self._norm_momentum,
         epsilon=self._norm_epsilon)
+    self._activation3 = tf_utils.get_activation(
+        self._activation, use_keras_layer=True)
+
+    if self._se_ratio and self._se_ratio > 0 and self._se_ratio <= 1:
+      self._squeeze_excitation = nn_layers.SqueezeExcitation(
+          in_filters=self._filters * 4,
+          out_filters=self._filters * 4,
+          se_ratio=self._se_ratio,
+          kernel_initializer=self._kernel_initializer,
+          kernel_regularizer=self._kernel_regularizer,
+          bias_regularizer=self._bias_regularizer)
+    else:
+      self._squeeze_excitation = None
 
     if self._stochastic_depth_drop_rate:
       self._stochastic_depth = nn_layers.StochasticDepth(
           self._stochastic_depth_drop_rate)
     else:
       self._stochastic_depth = None
+    self._add = tf.keras.layers.Add()
 
     super(BottleneckBlock, self).build(input_shape)
 
@@ -339,7 +403,10 @@ class BottleneckBlock(tf.keras.layers.Layer):
     config = {
         'filters': self._filters,
         'strides': self._strides,
+        'dilation_rate': self._dilation_rate,
         'use_projection': self._use_projection,
+        'se_ratio': self._se_ratio,
+        'resnetd_shortcut': self._resnetd_shortcut,
         'stochastic_depth_drop_rate': self._stochastic_depth_drop_rate,
         'kernel_initializer': self._kernel_initializer,
         'kernel_regularizer': self._kernel_regularizer,
@@ -355,24 +422,32 @@ class BottleneckBlock(tf.keras.layers.Layer):
   def call(self, inputs, training=None):
     shortcut = inputs
     if self._use_projection:
-      shortcut = self._shortcut(shortcut)
+      if self._resnetd_shortcut:
+        shortcut = self._shortcut0(shortcut)
+        shortcut = self._shortcut1(shortcut)
+      else:
+        shortcut = self._shortcut(shortcut)
       shortcut = self._norm0(shortcut)
 
     x = self._conv1(inputs)
     x = self._norm1(x)
-    x = self._activation_fn(x)
+    x = self._activation1(x)
 
     x = self._conv2(x)
     x = self._norm2(x)
-    x = self._activation_fn(x)
+    x = self._activation2(x)
 
     x = self._conv3(x)
     x = self._norm3(x)
 
+    if self._squeeze_excitation:
+      x = self._squeeze_excitation(x)
+
     if self._stochastic_depth:
       x = self._stochastic_depth(x, training=training)
 
-    return self._activation_fn(x + shortcut)
+    x = self._add([x, shortcut])
+    return self._activation3(x)
 
 
 @tf.keras.utils.register_keras_serializable(package='Vision')
@@ -391,34 +466,61 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
                kernel_regularizer=None,
                bias_regularizer=None,
                activation='relu',
+               se_inner_activation='relu',
+               se_gating_activation='sigmoid',
+               expand_se_in_filters=False,
+               depthwise_activation=None,
                use_sync_bn=False,
+               dilation_rate=1,
+               divisible_by=1,
+               regularize_depthwise=False,
+               use_depthwise=True,
+               use_residual=True,
                norm_momentum=0.99,
                norm_epsilon=0.001,
                **kwargs):
-    """An inverted bottleneck block with BN after convolutions.
+    """Initializes an inverted bottleneck block with BN after convolutions.
 
     Args:
-      in_filters: `int` number of filters of the input tensor.
-      out_filters: `int` number of filters of the output tensor.
-      expand_ratio: `int` expand_ratio for an inverted bottleneck block.
-      strides: `int` block stride. If greater than 1, this block will ultimately
-        downsample the input.
-      kernel_size: `int` kernel_size of the depthwise conv layer.
-      se_ratio: `float` or None. If not None, se ratio for the squeeze and
+      in_filters: An `int` number of filters of the input tensor.
+      out_filters: An `int` number of filters of the output tensor.
+      expand_ratio: An `int` of expand_ratio for an inverted bottleneck block.
+      strides: An `int` block stride. If greater than 1, this block will
+        ultimately downsample the input.
+      kernel_size: An `int` kernel_size of the depthwise conv layer.
+      se_ratio: A `float` or None. If not None, se ratio for the squeeze and
         excitation layer.
-      stochastic_depth_drop_rate: `float` or None. if not None, drop rate for
+      stochastic_depth_drop_rate: A `float` or None. if not None, drop rate for
         the stochastic depth layer.
-      kernel_initializer: kernel_initializer for convolutional layers.
-      kernel_regularizer: tf.keras.regularizers.Regularizer object for Conv2D.
+      kernel_initializer: A `str` of kernel_initializer for convolutional
+        layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+        Conv2D. Default to None.
+      bias_regularizer: A `tf.keras.regularizers.Regularizer` object for Conv2d.
         Default to None.
-      bias_regularizer: tf.keras.regularizers.Regularizer object for Conv2d.
-        Default to None.
-      activation: `str` name of the activation function.
-      use_sync_bn: if True, use synchronized batch normalization.
-      norm_momentum: `float` normalization omentum for the moving average.
-      norm_epsilon: `float` small float added to variance to avoid dividing by
-        zero.
-      **kwargs: keyword arguments to be passed.
+      activation: A `str` name of the activation function.
+      se_inner_activation: A `str` name of squeeze-excitation inner activation.
+      se_gating_activation: A `str` name of squeeze-excitation gating
+        activation.
+      expand_se_in_filters: A `bool` of whether or not to expand in_filter in
+        squeeze and excitation layer.
+      depthwise_activation: A `str` name of the activation function for
+        depthwise only.
+      use_sync_bn: A `bool`. If True, use synchronized batch normalization.
+      dilation_rate: An `int` that specifies the dilation rate to use for.
+      divisible_by: An `int` that ensures all inner dimensions are divisible by
+        this number.
+      dilated convolution: An `int` to specify the same value for all spatial
+        dimensions.
+      regularize_depthwise: A `bool` of whether or not apply regularization on
+        depthwise.
+      use_depthwise: A `bool` of whether to uses fused convolutions instead of
+        depthwise.
+      use_residual: A `bool` of whether to include residual connection between
+        input and output.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      **kwargs: Additional keyword arguments to be passed.
     """
     super(InvertedBottleneckBlock, self).__init__(**kwargs)
 
@@ -428,14 +530,23 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
     self._strides = strides
     self._kernel_size = kernel_size
     self._se_ratio = se_ratio
+    self._divisible_by = divisible_by
     self._stochastic_depth_drop_rate = stochastic_depth_drop_rate
+    self._dilation_rate = dilation_rate
     self._use_sync_bn = use_sync_bn
+    self._regularize_depthwise = regularize_depthwise
+    self._use_depthwise = use_depthwise
+    self._use_residual = use_residual
     self._activation = activation
+    self._se_inner_activation = se_inner_activation
+    self._se_gating_activation = se_gating_activation
+    self._depthwise_activation = depthwise_activation
     self._kernel_initializer = kernel_initializer
     self._norm_momentum = norm_momentum
     self._norm_epsilon = norm_epsilon
     self._kernel_regularizer = kernel_regularizer
     self._bias_regularizer = bias_regularizer
+    self._expand_se_in_filters = expand_se_in_filters
 
     if use_sync_bn:
       self._norm = tf.keras.layers.experimental.SyncBatchNormalization
@@ -445,15 +556,28 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
       self._bn_axis = -1
     else:
       self._bn_axis = 1
-    self._activation_fn = tf_utils.get_activation(activation)
+    if not depthwise_activation:
+      self._depthwise_activation = activation
+    if regularize_depthwise:
+      self._depthsize_regularizer = kernel_regularizer
+    else:
+      self._depthsize_regularizer = None
 
   def build(self, input_shape):
-    if self._expand_ratio != 1:
+    expand_filters = self._in_filters
+    if self._expand_ratio > 1:
       # First 1x1 conv for channel expansion.
+      expand_filters = nn_layers.make_divisible(
+          self._in_filters * self._expand_ratio, self._divisible_by)
+
+      expand_kernel = 1 if self._use_depthwise else self._kernel_size
+      expand_stride = 1 if self._use_depthwise else self._strides
+
       self._conv0 = tf.keras.layers.Conv2D(
-          filters=self._in_filters * self._expand_ratio,
-          kernel_size=1,
-          strides=1,
+          filters=expand_filters,
+          kernel_size=expand_kernel,
+          strides=expand_stride,
+          padding='same',
           use_bias=False,
           kernel_initializer=self._kernel_initializer,
           kernel_regularizer=self._kernel_regularizer,
@@ -462,30 +586,44 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
           axis=self._bn_axis,
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon)
+      self._activation_layer = tf_utils.get_activation(
+          self._activation, use_keras_layer=True)
 
-    # Depthwise conv.
-    self._conv1 = tf.keras.layers.DepthwiseConv2D(
-        kernel_size=(self._kernel_size, self._kernel_size),
-        strides=self._strides,
-        padding='same',
-        use_bias=False,
-        depthwise_initializer=self._kernel_initializer,
-        depthwise_regularizer=self._kernel_regularizer,
-        bias_regularizer=self._bias_regularizer)
-    self._norm1 = self._norm(
-        axis=self._bn_axis,
-        momentum=self._norm_momentum,
-        epsilon=self._norm_epsilon)
+    if self._use_depthwise:
+      # Depthwise conv.
+      self._conv1 = tf.keras.layers.DepthwiseConv2D(
+          kernel_size=(self._kernel_size, self._kernel_size),
+          strides=self._strides,
+          padding='same',
+          depth_multiplier=1,
+          dilation_rate=self._dilation_rate,
+          use_bias=False,
+          depthwise_initializer=self._kernel_initializer,
+          depthwise_regularizer=self._depthsize_regularizer,
+          bias_regularizer=self._bias_regularizer)
+      self._norm1 = self._norm(
+          axis=self._bn_axis,
+          momentum=self._norm_momentum,
+          epsilon=self._norm_epsilon)
+      self._depthwise_activation_layer = tf_utils.get_activation(
+          self._depthwise_activation, use_keras_layer=True)
 
     # Squeeze and excitation.
-    if self._se_ratio is not None and self._se_ratio > 0 and self._se_ratio <= 1:
+    if self._se_ratio and self._se_ratio > 0 and self._se_ratio <= 1:
+      logging.info('Use Squeeze and excitation.')
+      in_filters = self._in_filters
+      if self._expand_se_in_filters:
+        in_filters = expand_filters
       self._squeeze_excitation = nn_layers.SqueezeExcitation(
-          in_filters=self._in_filters,
+          in_filters=in_filters,
+          out_filters=expand_filters,
           se_ratio=self._se_ratio,
-          expand_ratio=self._expand_ratio,
+          divisible_by=self._divisible_by,
           kernel_initializer=self._kernel_initializer,
           kernel_regularizer=self._kernel_regularizer,
-          bias_regularizer=self._bias_regularizer)
+          bias_regularizer=self._bias_regularizer,
+          activation=self._se_inner_activation,
+          gating_activation=self._se_gating_activation)
     else:
       self._squeeze_excitation = None
 
@@ -494,6 +632,7 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
         filters=self._out_filters,
         kernel_size=1,
         strides=1,
+        padding='same',
         use_bias=False,
         kernel_initializer=self._kernel_initializer,
         kernel_regularizer=self._kernel_regularizer,
@@ -508,6 +647,7 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
           self._stochastic_depth_drop_rate)
     else:
       self._stochastic_depth = None
+    self._add = tf.keras.layers.Add()
 
     super(InvertedBottleneckBlock, self).build(input_shape)
 
@@ -519,12 +659,21 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
         'strides': self._strides,
         'kernel_size': self._kernel_size,
         'se_ratio': self._se_ratio,
+        'divisible_by': self._divisible_by,
         'stochastic_depth_drop_rate': self._stochastic_depth_drop_rate,
         'kernel_initializer': self._kernel_initializer,
         'kernel_regularizer': self._kernel_regularizer,
         'bias_regularizer': self._bias_regularizer,
         'activation': self._activation,
+        'se_inner_activation': self._se_inner_activation,
+        'se_gating_activation': self._se_gating_activation,
+        'expand_se_in_filters': self._expand_se_in_filters,
+        'depthwise_activation': self._depthwise_activation,
+        'dilation_rate': self._dilation_rate,
         'use_sync_bn': self._use_sync_bn,
+        'regularize_depthwise': self._regularize_depthwise,
+        'use_depthwise': self._use_depthwise,
+        'use_residual': self._use_residual,
         'norm_momentum': self._norm_momentum,
         'norm_epsilon': self._norm_epsilon
     }
@@ -533,16 +682,17 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
 
   def call(self, inputs, training=None):
     shortcut = inputs
-    if self._expand_ratio != 1:
+    if self._expand_ratio > 1:
       x = self._conv0(inputs)
       x = self._norm0(x)
-      x = self._activation_fn(x)
+      x = self._activation_layer(x)
     else:
       x = inputs
 
-    x = self._conv1(x)
-    x = self._norm1(x)
-    x = self._activation_fn(x)
+    if self._use_depthwise:
+      x = self._conv1(x)
+      x = self._norm1(x)
+      x = self._depthwise_activation_layer(x)
 
     if self._squeeze_excitation:
       x = self._squeeze_excitation(x)
@@ -550,29 +700,32 @@ class InvertedBottleneckBlock(tf.keras.layers.Layer):
     x = self._conv2(x)
     x = self._norm2(x)
 
-    if self._in_filters == self._out_filters and self._strides == 1:
+    if (self._use_residual and
+        self._in_filters == self._out_filters and
+        self._strides == 1):
       if self._stochastic_depth:
         x = self._stochastic_depth(x, training=training)
-      x = tf.add(x, shortcut)
+      x = self._add([x, shortcut])
 
     return x
 
 
 @tf.keras.utils.register_keras_serializable(package='Vision')
 class ResidualInner(tf.keras.layers.Layer):
-  """Single inner block of a residual.
+  """Creates a single inner block of a residual.
 
   This corresponds to `F`/`G` functions in the RevNet paper:
-  https://arxiv.org/pdf/1707.04585.pdf
+  Aidan N. Gomez, Mengye Ren, Raquel Urtasun, Roger B. Grosse.
+  The Reversible Residual Network: Backpropagation Without Storing Activations.
+  (https://arxiv.org/pdf/1707.04585.pdf)
   """
 
   def __init__(
       self,
       filters: int,
       strides: int,
-      kernel_initializer: Union[
-          str, Callable[..., tf.keras.initializers.Initializer]]
-      = 'VarianceScaling',
+      kernel_initializer: Union[str, Callable[
+          ..., tf.keras.initializers.Initializer]] = 'VarianceScaling',
       kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
       activation: Union[str, Callable[..., tf.Tensor]] = 'relu',
       use_sync_bn: bool = False,
@@ -580,22 +733,21 @@ class ResidualInner(tf.keras.layers.Layer):
       norm_epsilon: float = 0.001,
       batch_norm_first: bool = True,
       **kwargs):
-    """ResidualInner Initialization.
+    """Initializes a ResidualInner.
 
     Args:
-      filters: `int` output filter size.
-      strides: `int` stride size for convolution for the residual block.
-      kernel_initializer: `str` or `tf.keras.initializers.Initializer` instance
-        for convolutional layers.
-      kernel_regularizer: `tf.keras.regularizers.Regularizer` for Conv2D.
-      activation: `str` or `callable` instance of the activation function.
-      use_sync_bn: `bool` if True, use synchronized batch normalization.
-      norm_momentum: `float` normalization omentum for the moving average.
-      norm_epsilon: `float` small float added to variance to avoid dividing by
-        zero.
-      batch_norm_first: `bool` whether to apply activation and batch norm
+      filters: An `int` of output filter size.
+      strides: An `int` of stride size for convolution for the residual block.
+      kernel_initializer: A `str` or `tf.keras.initializers.Initializer`
+        instance for convolutional layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` for Conv2D.
+      activation: A `str` or `callable` instance of the activation function.
+      use_sync_bn: A `bool`. If True, use synchronized batch normalization.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      batch_norm_first: A `bool` of whether to apply activation and batch norm
         before conv.
-      **kwargs: additional keyword arguments to be passed.
+      **kwargs: Additional keyword arguments to be passed.
     """
     super(ResidualInner, self).__init__(**kwargs)
 
@@ -683,19 +835,20 @@ class ResidualInner(tf.keras.layers.Layer):
 
 @tf.keras.utils.register_keras_serializable(package='Vision')
 class BottleneckResidualInner(tf.keras.layers.Layer):
-  """Single inner block of a bottleneck residual.
+  """Creates a single inner block of a bottleneck.
 
   This corresponds to `F`/`G` functions in the RevNet paper:
-  https://arxiv.org/pdf/1707.04585.pdf
+  Aidan N. Gomez, Mengye Ren, Raquel Urtasun, Roger B. Grosse.
+  The Reversible Residual Network: Backpropagation Without Storing Activations.
+  (https://arxiv.org/pdf/1707.04585.pdf)
   """
 
   def __init__(
       self,
       filters: int,
       strides: int,
-      kernel_initializer: Union[
-          str, Callable[..., tf.keras.initializers.Initializer]]
-      = 'VarianceScaling',
+      kernel_initializer: Union[str, Callable[
+          ..., tf.keras.initializers.Initializer]] = 'VarianceScaling',
       kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
       activation: Union[str, Callable[..., tf.Tensor]] = 'relu',
       use_sync_bn: bool = False,
@@ -703,24 +856,23 @@ class BottleneckResidualInner(tf.keras.layers.Layer):
       norm_epsilon: float = 0.001,
       batch_norm_first: bool = True,
       **kwargs):
-    """BottleneckResidualInner Initialization.
+    """Initializes a BottleneckResidualInner.
 
     Args:
-      filters: `int` number of filters for first 2 convolutions. Last
-        Last, and thus the number of output channels from the bottlneck
-        block is `4*filters`
-      strides: `int` stride size for convolution for the residual block.
-      kernel_initializer: `str` or `tf.keras.initializers.Initializer` instance
-        for convolutional layers.
-      kernel_regularizer: `tf.keras.regularizers.Regularizer` for Conv2D.
-      activation: `str` or `callable` instance of the activation function.
-      use_sync_bn: `bool` if True, use synchronized batch normalization.
-      norm_momentum: `float` normalization omentum for the moving average.
-      norm_epsilon: `float` small float added to variance to avoid dividing by
-        zero.
-      batch_norm_first: `bool` whether to apply activation and batch norm
+      filters: An `int` number of filters for first 2 convolutions. Last Last,
+        and thus the number of output channels from the bottlneck block is
+        `4*filters`
+      strides: An `int` of stride size for convolution for the residual block.
+      kernel_initializer: A `str` or `tf.keras.initializers.Initializer`
+        instance for convolutional layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` for Conv2D.
+      activation: A `str` or `callable` instance of the activation function.
+      use_sync_bn: A `bool`. If True, use synchronized batch normalization.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      batch_norm_first: A `bool` of whether to apply activation and batch norm
         before conv.
-      **kwargs: additional keyword arguments to be passed.
+      **kwargs: Additional keyword arguments to be passed.
     """
     super(BottleneckResidualInner, self).__init__(**kwargs)
 
@@ -822,7 +974,7 @@ class BottleneckResidualInner(tf.keras.layers.Layer):
 
 @tf.keras.utils.register_keras_serializable(package='Vision')
 class ReversibleLayer(tf.keras.layers.Layer):
-  """A reversible layer.
+  """Creates a reversible layer.
 
   Computes y1 = x1 + f(x2), y2 = x2 + g(y1), where f and g can be arbitrary
   layers that are stateless, which in this case are `ResidualInner` layers.
@@ -833,20 +985,21 @@ class ReversibleLayer(tf.keras.layers.Layer):
                g: tf.keras.layers.Layer,
                manual_grads: bool = True,
                **kwargs):
-    """ReversibleLayer Initialization.
+    """Initializes a ReversibleLayer.
 
     Args:
-      f: `tf.keras.layers.Layer` f inner block referred to in paper. Each
-        reversible layer consists of two inner functions. For example, in RevNet
-        the reversible residual consists of two f/g inner (bottleneck) residual
-        functions. Where the input to the reversible layer is x, the input gets
-        partitioned in the channel dimension and the forward pass follows (eq8):
-        x = [x1; x2], z1 = x1 + f(x2), y2 = x2 + g(z1), y1 = stop_gradient(z1).
-      g: `tf.keras.layers.Layer` g inner block referred to in paper. Detailed
-        explanation same as above as `f` arg.
-      manual_grads: `bool` [Testing Only] whether to manually take gradients
-        as in Algorithm 1 or defer to autograd.
-      **kwargs: additional keyword arguments to be passed.
+      f: A `tf.keras.layers.Layer` instance of `f` inner block referred to in
+        paper. Each reversible layer consists of two inner functions. For
+        example, in RevNet the reversible residual consists of two f/g inner
+        (bottleneck) residual functions. Where the input to the reversible layer
+        is x, the input gets partitioned in the channel dimension and the
+        forward pass follows (eq8): x = [x1; x2], z1 = x1 + f(x2), y2 = x2 +
+          g(z1), y1 = stop_gradient(z1).
+      g: A `tf.keras.layers.Layer` instance of `g` inner block referred to in
+        paper. Detailed explanation same as above as `f` arg.
+      manual_grads: A `bool` [Testing Only] of whether to manually take
+        gradients as in Algorithm 1 or defer to autograd.
+      **kwargs: Additional keyword arguments to be passed.
     """
     super(ReversibleLayer, self).__init__(**kwargs)
 
@@ -886,18 +1039,23 @@ class ReversibleLayer(tf.keras.layers.Layer):
       self, inputs: tf.Tensor, training: Optional[bool] = None) -> tf.Tensor:
 
     @tf.custom_gradient
-    def reversible(x: tf.Tensor) -> Tuple[
-        tf.Tensor, Callable[[Any], Tuple[List[tf.Tensor], List[tf.Tensor]]]]:
-      """Implements Algorithm 1 in RevNet paper.
+    def reversible(
+        x: tf.Tensor
+    ) -> Tuple[tf.Tensor, Callable[[Any], Tuple[List[tf.Tensor],
+                                                List[tf.Tensor]]]]:
+      """Implements Algorithm 1 in the RevNet paper.
 
-      Paper: https://arxiv.org/pdf/1707.04585.pdf
+         Aidan N. Gomez, Mengye Ren, Raquel Urtasun, Roger B. Grosse.
+         The Reversible Residual Network: Backpropagation Without Storing
+         Activations.
+         (https://arxiv.org/pdf/1707.04585.pdf)
 
       Args:
-        x: input tensor.
+        x: An input `tf.Tensor.
 
       Returns:
-        y: the output [y1; y2] in algorithm 1.
-        grad_fn: callable function that computes the gradients.
+        y: The output [y1; y2] in Algorithm 1.
+        grad_fn: A callable function that computes the gradients.
       """
       with tf.GradientTape() as fwdtape:
         fwdtape.watch(x)
@@ -926,7 +1084,7 @@ class ReversibleLayer(tf.keras.layers.Layer):
 
       def grad_fn(dy: tf.Tensor,
                   variables: Optional[List[tf.Variable]] = None,
-                 ) -> Tuple[List[tf.Tensor], List[tf.Tensor]]:
+                  ) -> Tuple[List[tf.Tensor], List[tf.Tensor]]:
         """Given dy calculate (dy/dx)|_{x_{input}} using f/g."""
         if irreversible or not self._manual_grads:
           grads_combined = fwdtape.gradient(
@@ -947,11 +1105,11 @@ class ReversibleLayer(tf.keras.layers.Layer):
           self_to_var_index = [fg_var_refs.index(v.ref()) for v in variables]
 
           # Algorithm 1 in paper (line # documented in-line)
-          z1 = y1_nograd                                         # line 2
+          z1 = y1_nograd  # line 2
           with tf.GradientTape() as gtape:
             gtape.watch(z1)
             g_z1 = self._g(z1, training=training)
-          x2 = y2_nograd - g_z1                                  # line 3
+          x2 = y2_nograd - g_z1  # line 3
 
           with tf.GradientTape() as ftape:
             ftape.watch(x2)
@@ -963,16 +1121,16 @@ class ReversibleLayer(tf.keras.layers.Layer):
               g_z1,
               [z1] + self._g.trainable_variables,
               output_gradients=dy2)
-          dz1 = dy1 + g_grads_combined[0]                        # line 5
-          dwg = g_grads_combined[1:]                             # line 9
+          dz1 = dy1 + g_grads_combined[0]  # line 5
+          dwg = g_grads_combined[1:]  # line 9
 
           f_grads_combined = ftape.gradient(
               f_x2,
               [x2] + self._f.trainable_variables,
               output_gradients=dz1)
-          dx2 = dy2 + f_grads_combined[0]                        # line 6
-          dwf = f_grads_combined[1:]                             # line 8
-          dx1 = dz1                                              # line 7
+          dx2 = dy2 + f_grads_combined[0]  # line 6
+          dwf = f_grads_combined[1:]  # line 8
+          dx1 = dz1  # line 7
 
           # Pack the input and variable gradients.
           dx = tf.concat([dx1, dx2], axis=self._axis)
@@ -989,3 +1147,130 @@ class ReversibleLayer(tf.keras.layers.Layer):
 
     activations = reversible(inputs)
     return activations
+
+
+@tf.keras.utils.register_keras_serializable(package='Vision')
+class DepthwiseSeparableConvBlock(tf.keras.layers.Layer):
+  """Creates an depthwise separable convolution block with batch normalization."""
+
+  def __init__(
+      self,
+      filters: int,
+      kernel_size: int = 3,
+      strides: int = 1,
+      regularize_depthwise=False,
+      activation: Text = 'relu6',
+      kernel_initializer: Text = 'VarianceScaling',
+      kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
+      dilation_rate: int = 1,
+      use_sync_bn: bool = False,
+      norm_momentum: float = 0.99,
+      norm_epsilon: float = 0.001,
+      **kwargs):
+    """Initializes a convolution block with batch normalization.
+
+    Args:
+      filters: An `int` number of filters for the first two convolutions. Note
+        that the third and final convolution will use 4 times as many filters.
+      kernel_size: An `int` that specifies the height and width of the 2D
+        convolution window.
+      strides: An `int` of block stride. If greater than 1, this block will
+        ultimately downsample the input.
+      regularize_depthwise: A `bool`. If Ture, apply regularization on
+        depthwise.
+      activation: A `str` name of the activation function.
+      kernel_initializer: A `str` of kernel_initializer for convolutional
+        layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+        Conv2D. Default to None.
+      dilation_rate: An `int` or tuple/list of 2 `int`, specifying the dilation
+        rate to use for dilated convolution. Can be a single integer to specify
+        the same value for all spatial dimensions.
+      use_sync_bn: A `bool`. If True, use synchronized batch normalization.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      **kwargs: Additional keyword arguments to be passed.
+    """
+    super(DepthwiseSeparableConvBlock, self).__init__(**kwargs)
+    self._filters = filters
+    self._kernel_size = kernel_size
+    self._strides = strides
+    self._activation = activation
+    self._regularize_depthwise = regularize_depthwise
+    self._kernel_initializer = kernel_initializer
+    self._kernel_regularizer = kernel_regularizer
+    self._dilation_rate = dilation_rate
+    self._use_sync_bn = use_sync_bn
+    self._norm_momentum = norm_momentum
+    self._norm_epsilon = norm_epsilon
+
+    if use_sync_bn:
+      self._norm = tf.keras.layers.experimental.SyncBatchNormalization
+    else:
+      self._norm = tf.keras.layers.BatchNormalization
+    if tf.keras.backend.image_data_format() == 'channels_last':
+      self._bn_axis = -1
+    else:
+      self._bn_axis = 1
+    self._activation_fn = tf_utils.get_activation(activation)
+    if regularize_depthwise:
+      self._depthsize_regularizer = kernel_regularizer
+    else:
+      self._depthsize_regularizer = None
+
+  def get_config(self):
+    config = {
+        'filters': self._filters,
+        'strides': self._strides,
+        'regularize_depthwise': self._regularize_depthwise,
+        'stochastic_depth_drop_rate': self._stochastic_depth_drop_rate,
+        'kernel_initializer': self._kernel_initializer,
+        'kernel_regularizer': self._kernel_regularizer,
+        'bias_regularizer': self._bias_regularizer,
+        'activation': self._activation,
+        'use_sync_bn': self._use_sync_bn,
+        'norm_momentum': self._norm_momentum,
+        'norm_epsilon': self._norm_epsilon
+    }
+    base_config = super(DepthwiseSeparableConvBlock, self).get_config()
+    return dict(list(base_config.items()) + list(config.items()))
+
+  def build(self, input_shape):
+
+    self._dwconv0 = tf.keras.layers.DepthwiseConv2D(
+        kernel_size=self._kernel_size,
+        strides=self._strides,
+        padding='same',
+        depth_multiplier=1,
+        dilation_rate=self._dilation_rate,
+        kernel_initializer=self._kernel_initializer,
+        kernel_regularizer=self._depthsize_regularizer,
+        use_bias=False)
+    self._norm0 = self._norm(
+        axis=self._bn_axis,
+        momentum=self._norm_momentum,
+        epsilon=self._norm_epsilon)
+
+    self._conv1 = tf.keras.layers.Conv2D(
+        filters=self._filters,
+        kernel_size=1,
+        strides=1,
+        padding='same',
+        use_bias=False,
+        kernel_initializer=self._kernel_initializer,
+        kernel_regularizer=self._kernel_regularizer)
+    self._norm1 = self._norm(
+        axis=self._bn_axis,
+        momentum=self._norm_momentum,
+        epsilon=self._norm_epsilon)
+
+    super(DepthwiseSeparableConvBlock, self).build(input_shape)
+
+  def call(self, inputs, training=None):
+    x = self._dwconv0(inputs)
+    x = self._norm0(x)
+    x = self._activation_fn(x)
+
+    x = self._conv1(x)
+    x = self._norm1(x)
+    return self._activation_fn(x)

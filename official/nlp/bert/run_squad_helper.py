@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,11 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Library for running BERT family models on SQuAD 1.1/2.0 in TF 2.x."""
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import collections
 import json
@@ -163,7 +160,7 @@ def get_squad_model_to_predict(strategy, bert_config, checkpoint_path,
   """Gets a squad model to make predictions."""
   with strategy.scope():
     # Prediction always uses float32, even if training uses mixed precision.
-    tf.keras.mixed_precision.experimental.set_policy('float32')
+    tf.keras.mixed_precision.set_global_policy('float32')
     squad_model, _ = bert_models.squad_model(
         bert_config,
         input_meta_data['max_seq_length'],
@@ -186,8 +183,7 @@ def predict_squad_customized(strategy, input_meta_data, predict_tfrecord_path,
       FLAGS.predict_batch_size,
       is_training=False)
   predict_iterator = iter(
-      strategy.experimental_distribute_datasets_from_function(
-          predict_dataset_fn))
+      strategy.distribute_datasets_from_function(predict_dataset_fn))
 
   @tf.function
   def predict_step(iterator):
@@ -469,7 +465,7 @@ def export_squad(model_export_path, input_meta_data, bert_config):
   if not model_export_path:
     raise ValueError('Export path is not specified: %s' % model_export_path)
   # Export uses float32 for now, even if training uses mixed precision.
-  tf.keras.mixed_precision.experimental.set_policy('float32')
+  tf.keras.mixed_precision.set_global_policy('float32')
   squad_model, _ = bert_models.squad_model(bert_config,
                                            input_meta_data['max_seq_length'])
   model_saving_utils.export_bert_model(

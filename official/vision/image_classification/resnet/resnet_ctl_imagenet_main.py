@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Runs a ResNet model on the ImageNet dataset using custom training loops."""
 
 import math
@@ -160,9 +160,9 @@ def run(flags_obj):
       checkpoint_interval=checkpoint_interval)
 
   resnet_controller = orbit.Controller(
-      strategy,
-      runnable,
-      runnable if not flags_obj.skip_eval else None,
+      strategy=strategy,
+      trainer=runnable,
+      evaluator=runnable if not flags_obj.skip_eval else None,
       global_step=runnable.global_step,
       steps_per_loop=steps_per_loop,
       checkpoint_manager=checkpoint_manager,

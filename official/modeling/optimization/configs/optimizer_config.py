@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Dataclasses for optimizer configs."""
 from typing import List, Optional
 
@@ -21,7 +20,24 @@ from official.modeling.hyperparams import base_config
 
 
 @dataclasses.dataclass
-class SGDConfig(base_config.Config):
+class BaseOptimizerConfig(base_config.Config):
+  """Base optimizer config.
+
+  Attributes:
+    clipnorm: float >= 0 or None. If not None, Gradients will be clipped when
+      their L2 norm exceeds this value.
+    clipvalue: float >= 0 or None. If not None, Gradients will be clipped when
+      their absolute value exceeds this value.
+    global_clipnorm: float >= 0 or None. If not None, gradient of all weights is
+        clipped so that their global norm is no higher than this value
+  """
+  clipnorm: Optional[float] = None
+  clipvalue: Optional[float] = None
+  global_clipnorm: Optional[float] = None
+
+
+@dataclasses.dataclass
+class SGDConfig(BaseOptimizerConfig):
   """Configuration for SGD optimizer.
 
   The attributes for this class matches the arguments of tf.keras.optimizer.SGD.
@@ -39,7 +55,7 @@ class SGDConfig(base_config.Config):
 
 
 @dataclasses.dataclass
-class RMSPropConfig(base_config.Config):
+class RMSPropConfig(BaseOptimizerConfig):
   """Configuration for RMSProp optimizer.
 
   The attributes for this class matches the arguments of
@@ -60,7 +76,7 @@ class RMSPropConfig(base_config.Config):
 
 
 @dataclasses.dataclass
-class AdamConfig(base_config.Config):
+class AdamConfig(BaseOptimizerConfig):
   """Configuration for Adam optimizer.
 
   The attributes for this class matches the arguments of
@@ -82,7 +98,7 @@ class AdamConfig(base_config.Config):
 
 
 @dataclasses.dataclass
-class AdamWeightDecayConfig(base_config.Config):
+class AdamWeightDecayConfig(BaseOptimizerConfig):
   """Configuration for Adam optimizer with weight decay.
 
   Attributes:
@@ -95,8 +111,10 @@ class AdamWeightDecayConfig(base_config.Config):
     weight_decay_rate: float. Weight decay rate. Default to 0.
     include_in_weight_decay: list[str], or None. List of weight names to include
       in weight decay.
-    include_in_weight_decay: list[str], or None. List of weight names to not
+    exclude_from_weight_decay: list[str], or None. List of weight names to not
       include in weight decay.
+    gradient_clip_norm: A positive float. Clips the gradients to this maximum
+      L2-norm. Default to 1.0.
   """
   name: str = "AdamWeightDecay"
   beta_1: float = 0.9
@@ -110,7 +128,7 @@ class AdamWeightDecayConfig(base_config.Config):
 
 
 @dataclasses.dataclass
-class LAMBConfig(base_config.Config):
+class LAMBConfig(BaseOptimizerConfig):
   """Configuration for LAMB optimizer.
 
   The attributes for this class matches the arguments of
@@ -139,7 +157,7 @@ class LAMBConfig(base_config.Config):
 
 
 @dataclasses.dataclass
-class EMAConfig(base_config.Config):
+class EMAConfig(BaseOptimizerConfig):
   """Exponential moving average optimizer config.
 
   Attributes:
@@ -152,3 +170,38 @@ class EMAConfig(base_config.Config):
   average_decay: float = 0.99
   start_step: int = 0
   dynamic_decay: bool = True
+
+
+@dataclasses.dataclass
+class LARSConfig(BaseOptimizerConfig):
+  """Layer-wise adaptive rate scaling config.
+
+  Attributes:
+    name: 'str', name of the optimizer.
+    momentum: `float` hyperparameter >= 0 that accelerates gradient descent
+        in the relevant direction and dampens oscillations. Defaults to 0.9.
+    eeta: `float` LARS coefficient as used in the paper. Default set to LARS
+        coefficient from the paper. (eeta / weight_decay) determines the
+        highest scaling factor in LARS..
+    weight_decay_rate: `float` for weight decay.
+    nesterov: 'boolean' for whether to use nesterov momentum.
+    classic_momentum: `boolean` for whether to use classic (or popular)
+        momentum. The learning rate is applied during momentum update in
+        classic momentum, but after momentum for popular momentum.
+    exclude_from_weight_decay: A list of `string` for variable screening, if
+        any of the string appears in a variable's name, the variable will be
+        excluded for computing weight decay. For example, one could specify
+        the list like ['batch_normalization', 'bias'] to exclude BN and bias
+        from weight decay.
+    exclude_from_layer_adaptation: Similar to exclude_from_weight_decay, but
+        for layer adaptation. If it is None, it will be defaulted the same as
+        exclude_from_weight_decay.
+  """
+  name: str = "LARS"
+  momentum: float = 0.9
+  eeta: float = 0.001
+  weight_decay_rate: float = 0.0
+  nesterov: bool = False
+  classic_momentum: bool = True
+  exclude_from_weight_decay: Optional[List[str]] = None
+  exclude_from_layer_adaptation: Optional[List[str]] = None

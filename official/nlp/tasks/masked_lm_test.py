@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Tests for official.nlp.tasks.masked_lm."""
 
 import tensorflow as tf
@@ -28,6 +27,7 @@ class MLMTaskTest(tf.test.TestCase):
   def test_task(self):
     config = masked_lm.MaskedLMConfig(
         init_checkpoint=self.get_temp_dir(),
+        scale_loss=True,
         model=bert.PretrainerConfig(
             encoder=encoders.EncoderConfig(
                 bert=encoders.BertEncoderConfig(vocab_size=30522,

@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,16 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """ELECTRA pretraining task (Joint Masked LM and Replaced Token Detection)."""
 
 import dataclasses
 import tensorflow as tf
 
 from official.core import base_task
+from official.core import config_definitions as cfg
 from official.core import task_factory
 from official.modeling import tf_utils
-from official.modeling.hyperparams import config_definitions as cfg
 from official.nlp.configs import bert
 from official.nlp.configs import electra
 from official.nlp.configs import encoders
@@ -215,7 +214,6 @@ class ElectraPretrainTask(base_task.Task):
           aux_losses=model.losses)
       # Scales loss as the default gradients allreduce performs sum inside the
       # optimizer.
-      # TODO(b/154564893): enable loss scaling.
       scaled_loss = loss / tf.distribute.get_strategy().num_replicas_in_sync
     tvars = model.trainable_variables
     grads = tape.gradient(scaled_loss, tvars)

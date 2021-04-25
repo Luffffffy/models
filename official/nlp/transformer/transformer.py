@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,15 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Defines the Transformer model in TF 2.0.
 
 Model paper: https://arxiv.org/pdf/1706.03762.pdf
 Transformer model code source: https://github.com/tensorflow/tensor2tensor
 """
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import tensorflow as tf
 from official.nlp.modeling.layers import position_embedding
@@ -112,8 +109,8 @@ class Transformer(tf.keras.Model):
       sequence. float tensor with shape [batch_size, target_length, vocab_size]
       If target is none, then generate output sequence one token at a time.
         returns a dictionary {
-          outputs: [batch_size, decoded length]
-          scores: [batch_size, float]}
+          outputs: int tensor with shape [batch_size, decoded_length]
+          scores: float tensor with shape [batch_size]}
       Even when float16 is used, the output tensor(s) are always float32.
 
     Raises:
@@ -256,19 +253,13 @@ class Transformer(tf.keras.Model):
 
       # Preprocess decoder input by getting embeddings and adding timing signal.
       decoder_input = self.embedding_softmax_layer(decoder_input)
-
+      decoder_input += timing_signal[i]
       if self.params["padded_decode"]:
-        timing_signal_shape = timing_signal.shape.as_list()
-        decoder_input += tf.slice(timing_signal, [i, 0],
-                                  [1, timing_signal_shape[1]])
-
         bias_shape = decoder_self_attention_bias.shape.as_list()
         self_attention_bias = tf.slice(
             decoder_self_attention_bias, [0, 0, i, 0],
             [bias_shape[0], bias_shape[1], 1, bias_shape[3]])
       else:
-        decoder_input += timing_signal[i:i + 1]
-
         self_attention_bias = decoder_self_attention_bias[:, :, i:i + 1, :i + 1]
 
       decoder_outputs = self.decoder_stack(

@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Library to process data for tagging task such as NER/POS."""
 import collections
 import os
@@ -19,6 +19,7 @@ import os
 from absl import logging
 import tensorflow as tf
 
+from official.nlp.bert import tokenization
 from official.nlp.data import classifier_data_lib
 
 # A negative label id for the padding label, which will not contribute
@@ -89,13 +90,48 @@ class PanxProcessor(classifier_data_lib.DataProcessor):
       "tr", "et", "fi", "hu"
   ]
 
+  def __init__(self,
+               process_text_fn=tokenization.convert_to_unicode,
+               only_use_en_train=True,
+               only_use_en_dev=True):
+    """See base class.
+
+    Args:
+      process_text_fn: See base class.
+      only_use_en_train: If True, only use english training data. Otherwise, use
+        training data from all languages.
+      only_use_en_dev: If True, only use english dev data. Otherwise, use dev
+        data from all languages.
+    """
+    super(PanxProcessor, self).__init__(process_text_fn)
+    self.only_use_en_train = only_use_en_train
+    self.only_use_en_dev = only_use_en_dev
+
   def get_train_examples(self, data_dir):
-    return _read_one_file(
+    examples = _read_one_file(
         os.path.join(data_dir, "train-en.tsv"), self.get_labels())
+    if not self.only_use_en_train:
+      for language in self.supported_languages:
+        if language == "en":
+          continue
+        examples.extend(
+            _read_one_file(
+                os.path.join(data_dir, f"train-{language}.tsv"),
+                self.get_labels()))
+    return examples
 
   def get_dev_examples(self, data_dir):
-    return _read_one_file(
+    examples = _read_one_file(
         os.path.join(data_dir, "dev-en.tsv"), self.get_labels())
+    if not self.only_use_en_dev:
+      for language in self.supported_languages:
+        if language == "en":
+          continue
+        examples.extend(
+            _read_one_file(
+                os.path.join(data_dir, f"dev-{language}.tsv"),
+                self.get_labels()))
+    return examples
 
   def get_test_examples(self, data_dir):
     examples_dict = {}
@@ -120,13 +156,49 @@ class UdposProcessor(classifier_data_lib.DataProcessor):
       "ta", "te", "th", "tl", "tr", "ur", "vi", "yo", "zh"
   ]
 
+  def __init__(self,
+               process_text_fn=tokenization.convert_to_unicode,
+               only_use_en_train=True,
+               only_use_en_dev=True):
+    """See base class.
+
+    Args:
+      process_text_fn: See base class.
+      only_use_en_train: If True, only use english training data. Otherwise, use
+        training data from all languages.
+      only_use_en_dev: If True, only use english dev data. Otherwise, use dev
+        data from all languages.
+    """
+    super(UdposProcessor, self).__init__(process_text_fn)
+    self.only_use_en_train = only_use_en_train
+    self.only_use_en_dev = only_use_en_dev
+
   def get_train_examples(self, data_dir):
-    return _read_one_file(
-        os.path.join(data_dir, "train-en.tsv"), self.get_labels())
+    if self.only_use_en_train:
+      examples = _read_one_file(
+          os.path.join(data_dir, "train-en.tsv"), self.get_labels())
+    else:
+      examples = []
+      # Uses glob because some languages are missing in train.
+      for filepath in tf.io.gfile.glob(os.path.join(data_dir, "train-*.tsv")):
+        examples.extend(
+            _read_one_file(
+                filepath,
+                self.get_labels()))
+    return examples
 
   def get_dev_examples(self, data_dir):
-    return _read_one_file(
-        os.path.join(data_dir, "dev-en.tsv"), self.get_labels())
+    if self.only_use_en_dev:
+      examples = _read_one_file(
+          os.path.join(data_dir, "dev-en.tsv"), self.get_labels())
+    else:
+      examples = []
+      for filepath in tf.io.gfile.glob(os.path.join(data_dir, "dev-*.tsv")):
+        examples.extend(
+            _read_one_file(
+                filepath,
+                self.get_labels()))
+    return examples
 
   def get_test_examples(self, data_dir):
     examples_dict = {}
@@ -152,10 +224,10 @@ def _tokenize_example(example, max_length, tokenizer, text_preprocessing=None):
   max_length = max_length - 2
   new_examples = []
   new_example = InputExample(sentence_id=example.sentence_id, sub_sentence_id=0)
-  for i, word in enumerate(example.words):
-    if any([x < 0 for x in example.label_ids]):
-      raise ValueError("Unexpected negative label_id: %s" % example.label_ids)
+  if any([x < 0 for x in example.label_ids]):
+    raise ValueError("Unexpected negative label_id: %s" % example.label_ids)
 
+  for i, word in enumerate(example.words):
     if text_preprocessing:
       word = text_preprocessing(word)
     subwords = tokenizer.tokenize(word)

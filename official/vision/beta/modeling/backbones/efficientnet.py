@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,15 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Contains definitions of EfficientNet Networks."""
 
 import math
+from typing import Any, List, Tuple
+
 # Import libraries
-from absl import logging
+
 import tensorflow as tf
+
+from official.modeling import hyperparams
 from official.modeling import tf_utils
+from official.vision.beta.modeling.backbones import factory
 from official.vision.beta.modeling.layers import nn_blocks
+from official.vision.beta.modeling.layers import nn_layers
 
 layers = tf.keras.layers
 
@@ -49,31 +55,33 @@ SCALING_MAP = {
 }
 
 
-def round_filters(filters, multiplier, divisor=8, min_depth=None, skip=False):
-  """Round number of filters based on depth multiplier."""
-  orig_f = filters
-  if skip or not multiplier:
-    return filters
+class BlockSpec():
+  """A container class that specifies the block configuration for MnasNet."""
 
-  filters *= multiplier
-  min_depth = min_depth or divisor
-  new_filters = max(min_depth, int(filters + divisor / 2) // divisor * divisor)
-  # Make sure that round down does not go down by more than 10%.
-  if new_filters < 0.9 * filters:
-    new_filters += divisor
-  logging.info('round_filter input=%s output=%s', orig_f, new_filters)
-  return int(new_filters)
+  def __init__(self, block_fn: str, block_repeats: int, kernel_size: int,
+               strides: int, expand_ratio: float, in_filters: int,
+               out_filters: int, is_output: bool, width_scale: float,
+               depth_scale: float):
+    self.block_fn = block_fn
+    self.block_repeats = round_repeats(block_repeats, depth_scale)
+    self.kernel_size = kernel_size
+    self.strides = strides
+    self.expand_ratio = expand_ratio
+    self.in_filters = nn_layers.round_filters(in_filters, width_scale)
+    self.out_filters = nn_layers.round_filters(out_filters, width_scale)
+    self.is_output = is_output
 
 
-def round_repeats(repeats, multiplier, skip=False):
-  """Round number of filters based on depth multiplier."""
+def round_repeats(repeats: int, multiplier: float, skip: bool = False) -> int:
+  """Returns rounded number of filters based on depth multiplier."""
   if skip or not multiplier:
     return repeats
   return int(math.ceil(multiplier * repeats))
 
 
-def block_spec_decoder(specs, width_scale, depth_scale):
-  """Decode specs for a block."""
+def block_spec_decoder(specs: List[Tuple[Any, ...]], width_scale: float,
+                       depth_scale: float) -> List[BlockSpec]:
+  """Decodes and returns specs for a block."""
   decoded_specs = []
   for s in specs:
     s = s + (
@@ -84,58 +92,49 @@ def block_spec_decoder(specs, width_scale, depth_scale):
   return decoded_specs
 
 
-class BlockSpec(object):
-  """A container class that specifies the block configuration for MnasNet."""
-
-  def __init__(self, block_fn, block_repeats, kernel_size, strides,
-               expand_ratio, in_filters, out_filters, is_output, width_scale,
-               depth_scale):
-    self.block_fn = block_fn
-    self.block_repeats = round_repeats(block_repeats, depth_scale)
-    self.kernel_size = kernel_size
-    self.strides = strides
-    self.expand_ratio = expand_ratio
-    self.in_filters = round_filters(in_filters, width_scale)
-    self.out_filters = round_filters(out_filters, width_scale)
-    self.is_output = is_output
-
-
 @tf.keras.utils.register_keras_serializable(package='Vision')
 class EfficientNet(tf.keras.Model):
-  """Class to build EfficientNet family model."""
+  """Creates an EfficientNet family model.
+
+  This implements the EfficientNet model from:
+    Mingxing Tan, Quoc V. Le.
+    EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks.
+    (https://arxiv.org/pdf/1905.11946)
+  """
 
   def __init__(self,
-               model_id,
-               input_specs=layers.InputSpec(shape=[None, None, None, 3]),
-               se_ratio=0.0,
-               stochastic_depth_drop_rate=0.0,
-               kernel_initializer='VarianceScaling',
-               kernel_regularizer=None,
-               bias_regularizer=None,
-               activation='relu',
-               use_sync_bn=False,
-               norm_momentum=0.99,
-               norm_epsilon=0.001,
+               model_id: str,
+               input_specs: tf.keras.layers.InputSpec = layers.InputSpec(
+                   shape=[None, None, None, 3]),
+               se_ratio: float = 0.0,
+               stochastic_depth_drop_rate: float = 0.0,
+               kernel_initializer: str = 'VarianceScaling',
+               kernel_regularizer: tf.keras.regularizers.Regularizer = None,
+               bias_regularizer: tf.keras.regularizers.Regularizer = None,
+               activation: str = 'relu',
+               use_sync_bn: bool = False,
+               norm_momentum: float = 0.99,
+               norm_epsilon: float = 0.001,
                **kwargs):
-    """EfficientNet initialization function.
+    """Initializes an EfficientNet model.
 
     Args:
-      model_id: `str` model id of EfficientNet.
-      input_specs: `tf.keras.layers.InputSpec` specs of the input tensor.
-      se_ratio: `float` squeeze and excitation ratio for inverted bottleneck
-        blocks.
-      stochastic_depth_drop_rate: `float` drop rate for drop connect layer.
-      kernel_initializer: kernel_initializer for convolutional layers.
-      kernel_regularizer: tf.keras.regularizers.Regularizer object for Conv2D.
+      model_id: A `str` of model ID of EfficientNet.
+      input_specs: A `tf.keras.layers.InputSpec` of the input tensor.
+      se_ratio: A `float` of squeeze and excitation ratio for inverted
+        bottleneck blocks.
+      stochastic_depth_drop_rate: A `float` of drop rate for drop connect layer.
+      kernel_initializer: A `str` for kernel initializer of convolutional
+        layers.
+      kernel_regularizer: A `tf.keras.regularizers.Regularizer` object for
+        Conv2D. Default to None.
+      bias_regularizer: A `tf.keras.regularizers.Regularizer` object for Conv2D.
         Default to None.
-      bias_regularizer: tf.keras.regularizers.Regularizer object for Conv2d.
-        Default to None.
-      activation: `str` name of the activation function.
-      use_sync_bn: if True, use synchronized batch normalization.
-      norm_momentum: `float` normalization omentum for the moving average.
-      norm_epsilon: `float` small float added to variance to avoid dividing by
-        zero.
-      **kwargs: keyword arguments to be passed.
+      activation: A `str` of name of the activation function.
+      use_sync_bn: If True, use synchronized batch normalization.
+      norm_momentum: A `float` of normalization momentum for the moving average.
+      norm_epsilon: A `float` added to variance to avoid dividing by zero.
+      **kwargs: Additional keyword arguments to be passed.
     """
     self._model_id = model_id
     self._input_specs = input_specs
@@ -165,7 +164,7 @@ class EfficientNet(tf.keras.Model):
 
     # Build stem.
     x = layers.Conv2D(
-        filters=round_filters(32, width_scale),
+        filters=nn_layers.round_filters(32, width_scale),
         kernel_size=3,
         strides=2,
         use_bias=False,
@@ -193,11 +192,11 @@ class EfficientNet(tf.keras.Model):
         endpoint_level += 1
 
     # Build output specs for downstream tasks.
-    self._output_specs = {l: endpoints[l].get_shape for l in endpoints.keys()}
+    self._output_specs = {l: endpoints[l].get_shape() for l in endpoints}
 
     # Build the final conv for classification.
     x = layers.Conv2D(
-        filters=round_filters(1280, width_scale),
+        filters=nn_layers.round_filters(1280, width_scale),
         kernel_size=1,
         strides=1,
         use_bias=False,
@@ -214,16 +213,19 @@ class EfficientNet(tf.keras.Model):
     super(EfficientNet, self).__init__(
         inputs=inputs, outputs=endpoints, **kwargs)
 
-  def _block_group(self, inputs, specs, name='block_group'):
+  def _block_group(self,
+                   inputs: tf.Tensor,
+                   specs: BlockSpec,
+                   name: str = 'block_group'):
     """Creates one group of blocks for the EfficientNet model.
 
     Args:
-      inputs: `Tensor` of size `[batch, channels, height, width]`.
-      specs: specifications for one inverted bottleneck block group.
-      name: `str`name for the block.
+      inputs: A `tf.Tensor` of size `[batch, channels, height, width]`.
+      specs: The specifications for one inverted bottleneck block group.
+      name: A `str` name for the block.
 
     Returns:
-      The output `Tensor` of the block layer.
+      The output `tf.Tensor` of the block layer.
     """
     if specs.block_fn == 'mbconv':
       block_fn = nn_blocks.InvertedBottleneckBlock
@@ -290,3 +292,27 @@ class EfficientNet(tf.keras.Model):
   def output_specs(self):
     """A dict of {level: TensorShape} pairs for the model output."""
     return self._output_specs
+
+
+@factory.register_backbone_builder('efficientnet')
+def build_efficientnet(
+    input_specs: tf.keras.layers.InputSpec,
+    model_config: hyperparams.Config,
+    l2_regularizer: tf.keras.regularizers.Regularizer = None) -> tf.keras.Model:
+  """Builds EfficientNet backbone from a config."""
+  backbone_type = model_config.backbone.type
+  backbone_cfg = model_config.backbone.get()
+  norm_activation_config = model_config.norm_activation
+  assert backbone_type == 'efficientnet', (f'Inconsistent backbone type '
+                                           f'{backbone_type}')
+
+  return EfficientNet(
+      model_id=backbone_cfg.model_id,
+      input_specs=input_specs,
+      stochastic_depth_drop_rate=backbone_cfg.stochastic_depth_drop_rate,
+      se_ratio=backbone_cfg.se_ratio,
+      activation=norm_activation_config.activation,
+      use_sync_bn=norm_activation_config.use_sync_bn,
+      norm_momentum=norm_activation_config.norm_momentum,
+      norm_epsilon=norm_activation_config.norm_epsilon,
+      kernel_regularizer=l2_regularizer)

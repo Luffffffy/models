@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,18 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """RetinaNet task definition."""
+from typing import Any, Optional, List, Tuple, Mapping
 
 from absl import logging
 import tensorflow as tf
+from official.common import dataset_fn
 from official.core import base_task
-from official.core import input_reader
 from official.core import task_factory
 from official.vision import keras_cv
 from official.vision.beta.configs import retinanet as exp_cfg
+from official.vision.beta.dataloaders import input_reader_factory
 from official.vision.beta.dataloaders import retinanet_input
 from official.vision.beta.dataloaders import tf_example_decoder
+from official.vision.beta.dataloaders import tfds_detection_decoders
 from official.vision.beta.dataloaders import tf_example_label_map_decoder
 from official.vision.beta.evaluation import coco_evaluator
 from official.vision.beta.modeling import factory
@@ -76,33 +78,36 @@ class RetinaNetTask(base_task.Task):
       status = ckpt.restore(ckpt_dir_or_file)
       status.expect_partial().assert_existing_objects_matched()
     else:
-      assert "Only 'all' or 'backbone' can be used to initialize the model."
+      raise ValueError(
+          "Only 'all' or 'backbone' can be used to initialize the model.")
 
     logging.info('Finished loading pretrained checkpoint from %s',
                  ckpt_dir_or_file)
 
-  def build_inputs(self, params, input_context=None):
+  def build_inputs(self,
+                   params: exp_cfg.DataConfig,
+                   input_context: Optional[tf.distribute.InputContext] = None):
     """Build input dataset."""
-    decoder_cfg = params.decoder.get()
-    if params.decoder.type == 'simple_decoder':
-      decoder = tf_example_decoder.TfExampleDecoder(
-          regenerate_source_id=decoder_cfg.regenerate_source_id)
-    elif params.decoder.type == 'label_map_decoder':
-      decoder = tf_example_label_map_decoder.TfExampleDecoderLabelMap(
-          label_map=decoder_cfg.label_map,
-          regenerate_source_id=decoder_cfg.regenerate_source_id)
+
+    if params.tfds_name:
+      if params.tfds_name in tfds_detection_decoders.TFDS_ID_TO_DECODER_MAP:
+        decoder = tfds_detection_decoders.TFDS_ID_TO_DECODER_MAP[
+            params.tfds_name]()
+      else:
+        raise ValueError('TFDS {} is not supported'.format(params.tfds_name))
     else:
-      raise ValueError('Unknown decoder type: {}!'.format(params.decoder.type))
-    decoder_cfg = params.decoder.get()
-    if params.decoder.type == 'simple_decoder':
-      decoder = tf_example_decoder.TfExampleDecoder(
-          regenerate_source_id=decoder_cfg.regenerate_source_id)
-    elif params.decoder.type == 'label_map_decoder':
-      decoder = tf_example_decoder.TfExampleDecoderLabelMap(
-          label_map=decoder_cfg.label_map,
-          regenerate_source_id=decoder_cfg.regenerate_source_id)
-    else:
-      raise ValueError('Unknown decoder type: {}!'.format(params.decoder.type))
+      decoder_cfg = params.decoder.get()
+      if params.decoder.type == 'simple_decoder':
+        decoder = tf_example_decoder.TfExampleDecoder(
+            regenerate_source_id=decoder_cfg.regenerate_source_id)
+      elif params.decoder.type == 'label_map_decoder':
+        decoder = tf_example_label_map_decoder.TfExampleDecoderLabelMap(
+            label_map=decoder_cfg.label_map,
+            regenerate_source_id=decoder_cfg.regenerate_source_id)
+      else:
+        raise ValueError('Unknown decoder type: {}!'.format(
+            params.decoder.type))
+
     parser = retinanet_input.Parser(
         output_size=self.task_config.model.input_size[:2],
         min_level=self.task_config.model.min_level,
@@ -119,19 +124,22 @@ class RetinaNetTask(base_task.Task):
         skip_crowd_during_training=params.parser.skip_crowd_during_training,
         max_num_instances=params.parser.max_num_instances)
 
-    reader = input_reader.InputReader(
+    reader = input_reader_factory.input_reader_generator(
         params,
-        dataset_fn=tf.data.TFRecordDataset,
+        dataset_fn=dataset_fn.pick_dataset_fn(params.file_type),
         decoder_fn=decoder.decode,
         parser_fn=parser.parse_fn(params.is_training))
     dataset = reader.read(input_context=input_context)
 
     return dataset
 
-  def build_losses(self, outputs, labels, aux_losses=None):
+  def build_losses(self,
+                   outputs: Mapping[str, Any],
+                   labels: Mapping[str, Any],
+                   aux_losses: Optional[Any] = None):
     """Build RetinaNet losses."""
     params = self.task_config
-    cls_loss_fn = keras_cv.FocalLoss(
+    cls_loss_fn = keras_cv.losses.FocalLoss(
         alpha=params.losses.focal_loss_alpha,
         gamma=params.losses.focal_loss_gamma,
         reduction=tf.keras.losses.Reduction.SUM)
@@ -145,14 +153,14 @@ class RetinaNetTask(base_task.Task):
     num_positives = tf.reduce_sum(box_sample_weight) + 1.0
     cls_sample_weight = cls_sample_weight / num_positives
     box_sample_weight = box_sample_weight / num_positives
-    y_true_cls = keras_cv.multi_level_flatten(
+    y_true_cls = keras_cv.losses.multi_level_flatten(
         labels['cls_targets'], last_dim=None)
     y_true_cls = tf.one_hot(y_true_cls, params.model.num_classes)
-    y_pred_cls = keras_cv.multi_level_flatten(
+    y_pred_cls = keras_cv.losses.multi_level_flatten(
         outputs['cls_outputs'], last_dim=params.model.num_classes)
-    y_true_box = keras_cv.multi_level_flatten(
+    y_true_box = keras_cv.losses.multi_level_flatten(
         labels['box_targets'], last_dim=4)
-    y_pred_box = keras_cv.multi_level_flatten(
+    y_pred_box = keras_cv.losses.multi_level_flatten(
         outputs['box_outputs'], last_dim=4)
 
     cls_loss = cls_loss_fn(
@@ -169,7 +177,7 @@ class RetinaNetTask(base_task.Task):
 
     return total_loss, cls_loss, box_loss, model_loss
 
-  def build_metrics(self, training=True):
+  def build_metrics(self, training: bool = True):
     """Build detection metrics."""
     metrics = []
     metric_names = ['total_loss', 'cls_loss', 'box_loss', 'model_loss']
@@ -177,12 +185,21 @@ class RetinaNetTask(base_task.Task):
       metrics.append(tf.keras.metrics.Mean(name, dtype=tf.float32))
 
     if not training:
+      if self.task_config.validation_data.tfds_name and self.task_config.annotation_file:
+        raise ValueError(
+            "Can't evaluate using annotation file when TFDS is used.")
       self.coco_metric = coco_evaluator.COCOEvaluator(
-          annotation_file=None, include_mask=False)
+          annotation_file=self.task_config.annotation_file,
+          include_mask=False,
+          per_category_metrics=self.task_config.per_category_metrics)
 
     return metrics
 
-  def train_step(self, inputs, model, optimizer, metrics=None):
+  def train_step(self,
+                 inputs: Tuple[Any, Any],
+                 model: tf.keras.Model,
+                 optimizer: tf.keras.optimizers.Optimizer,
+                 metrics: Optional[List[Any]] = None):
     """Does forward and backward.
 
     Args:
@@ -208,21 +225,14 @@ class RetinaNetTask(base_task.Task):
 
       # For mixed_precision policy, when LossScaleOptimizer is used, loss is
       # scaled for numerical stability.
-      if isinstance(
-          optimizer, tf.keras.mixed_precision.experimental.LossScaleOptimizer):
+      if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
         scaled_loss = optimizer.get_scaled_loss(scaled_loss)
 
     tvars = model.trainable_variables
     grads = tape.gradient(scaled_loss, tvars)
     # Scales back gradient when LossScaleOptimizer is used.
-    if isinstance(
-        optimizer, tf.keras.mixed_precision.experimental.LossScaleOptimizer):
+    if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
       grads = optimizer.get_unscaled_gradients(grads)
-
-    # Apply gradient clipping.
-    if self.task_config.gradient_clip_norm > 0:
-      grads, _ = tf.clip_by_global_norm(
-          grads, self.task_config.gradient_clip_norm)
     optimizer.apply_gradients(list(zip(grads, tvars)))
 
     logs = {self.loss: loss}
@@ -240,7 +250,10 @@ class RetinaNetTask(base_task.Task):
 
     return logs
 
-  def validation_step(self, inputs, model, metrics=None):
+  def validation_step(self,
+                      inputs: Tuple[Any, Any],
+                      model: tf.keras.Model,
+                      metrics: Optional[List[Any]] = None):
     """Validatation step.
 
     Args:
@@ -291,5 +304,5 @@ class RetinaNetTask(base_task.Task):
                                   step_outputs[self.coco_metric.name][1])
     return state
 
-  def reduce_aggregated_logs(self, aggregated_logs):
+  def reduce_aggregated_logs(self, aggregated_logs, global_step=None):
     return self.coco_metric.result()

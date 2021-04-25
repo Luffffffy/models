@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,17 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Losses utilities for detection models."""
 
-# Import libraries
 import tensorflow as tf
 
 
 def multi_level_flatten(multi_level_inputs, last_dim=None):
   """Flattens a multi-level input.
 
-  Arguments:
+  Args:
     multi_level_inputs: Ordered Dict with level to [batch, d1, ..., dm].
     last_dim: Whether the output should be [batch_size, None], or [batch_size,
       None, last_dim]. Defaults to `None`.

@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,23 +11,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
-"""Tests for image_classification."""
 
+# Lint as: python3
+"""Tests for image_classification."""
 # pylint: disable=unused-import
 from absl.testing import parameterized
 import tensorflow as tf
 
+from official.core import config_definitions as cfg
 from official.core import exp_factory
-from official.modeling.hyperparams import config_definitions as cfg
 from official.vision import beta
 from official.vision.beta.configs import image_classification as exp_cfg
 
 
 class ImageClassificationConfigTest(tf.test.TestCase, parameterized.TestCase):
 
-  @parameterized.parameters(('resnet_imagenet',),
-                            ('revnet_imagenet',))
+  @parameterized.parameters(
+      ('resnet_imagenet',),
+      ('resnet_rs_imagenet',),
+      ('revnet_imagenet',),
+      ('mobilenet_imagenet'),
+  )
   def test_image_classification_configs(self, config_name):
     config = exp_factory.get_exp_config(config_name)
     self.assertIsInstance(config, cfg.ExperimentConfig)

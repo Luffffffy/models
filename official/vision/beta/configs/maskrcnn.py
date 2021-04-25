@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,17 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
+# Lint as: python3
 """Mask R-CNN configuration definition."""
 
 import os
 from typing import List, Optional
 import dataclasses
-
+from official.core import config_definitions as cfg
 from official.core import exp_factory
 from official.modeling import hyperparams
 from official.modeling import optimization
-from official.modeling.hyperparams import config_definitions as cfg
 from official.vision.beta.configs import backbones
 from official.vision.beta.configs import common
 from official.vision.beta.configs import decoders
@@ -32,11 +31,13 @@ from official.vision.beta.configs import decoders
 @dataclasses.dataclass
 class TfExampleDecoder(hyperparams.Config):
   regenerate_source_id: bool = False
+  mask_binarize_threshold: Optional[float] = None
 
 
 @dataclasses.dataclass
 class TfExampleDecoderLabelMap(hyperparams.Config):
   regenerate_source_id: bool = False
+  mask_binarize_threshold: Optional[float] = None
   label_map: str = ''
 
 
@@ -74,6 +75,7 @@ class DataConfig(cfg.DataConfig):
   decoder: DataDecoder = DataDecoder()
   parser: Parser = Parser()
   shuffle_buffer_size: int = 10000
+  file_type: str = 'tfrecord'
 
 
 @dataclasses.dataclass
@@ -146,6 +148,7 @@ class MaskHead(hyperparams.Config):
   num_convs: int = 4
   num_filters: int = 256
   use_separable_conv: bool = False
+  class_agnostic: bool = False
 
 
 @dataclasses.dataclass
@@ -207,7 +210,9 @@ class MaskRCNNTask(cfg.TaskConfig):
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: str = 'all'  # all or backbone
   annotation_file: Optional[str] = None
-  gradient_clip_norm: float = 0.0
+  per_category_metrics: bool = False
+  # If set, we only use masks for the specified class IDs.
+  allowed_mask_class_ids: Optional[List[int]] = None
 
 
 COCO_INPUT_PATH_BASE = 'coco'

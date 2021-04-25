@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,15 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Helper functions for running models in a distributed setting."""
 
 import json
 import os
-import random
-import string
-
-from absl import logging
 import tensorflow as tf
 
 
@@ -98,7 +94,8 @@ def get_distribution_strategy(distribution_strategy="mirrored",
                               num_gpus=0,
                               all_reduce_alg=None,
                               num_packs=1,
-                              tpu_address=None):
+                              tpu_address=None,
+                              **kwargs):
   """Return a DistributionStrategy for running the model.
 
   Args:
@@ -117,6 +114,7 @@ def get_distribution_strategy(distribution_strategy="mirrored",
       or `tf.distribute.HierarchicalCopyAllReduce` for `MirroredStrategy`.
     tpu_address: Optional. String that represents TPU to connect to. Must not be
       None if `distribution_strategy` is set to `tpu`.
+    **kwargs: Additional kwargs for internal usages.
 
   Returns:
     tf.distribute.DistibutionStrategy object.
@@ -125,8 +123,18 @@ def get_distribution_strategy(distribution_strategy="mirrored",
       `num_gpus` is larger than 1; or `num_gpus` is negative or if
       `distribution_strategy` is `tpu` but `tpu_address` is not specified.
   """
+  del kwargs
   if num_gpus < 0:
     raise ValueError("`num_gpus` can not be negative.")
+
+  if not isinstance(distribution_strategy, str):
+    msg = ("distribution_strategy must be a string but got: %s." %
+           (distribution_strategy,))
+    if distribution_strategy == False:  # pylint: disable=singleton-comparison,g-explicit-bool-comparison
+      msg += (" If you meant to pass the string 'off', make sure you add "
+              "quotes around 'off' so that yaml interprets it as a string "
+              "instead of a bool.")
+    raise ValueError(msg)
 
   distribution_strategy = distribution_strategy.lower()
   if distribution_strategy == "off":
@@ -138,7 +146,7 @@ def get_distribution_strategy(distribution_strategy="mirrored",
   if distribution_strategy == "tpu":
     # When tpu_address is an empty string, we communicate with local TPUs.
     cluster_resolver = tpu_initialize(tpu_address)
-    return tf.distribute.experimental.TPUStrategy(cluster_resolver)
+    return tf.distribute.TPUStrategy(cluster_resolver)
 
   if distribution_strategy == "multi_worker_mirrored":
     return tf.distribute.experimental.MultiWorkerMirroredStrategy(
@@ -162,7 +170,8 @@ def get_distribution_strategy(distribution_strategy="mirrored",
         cross_device_ops=_mirrored_cross_device_ops(all_reduce_alg, num_packs))
 
   if distribution_strategy == "parameter_server":
-    return tf.distribute.experimental.ParameterServerStrategy()
+    cluster_resolver = tf.distribute.cluster_resolver.TFConfigClusterResolver()
+    return tf.distribute.experimental.ParameterServerStrategy(cluster_resolver)
 
   raise ValueError("Unrecognized Distribution Strategy: %r" %
                    distribution_strategy)
@@ -173,6 +182,7 @@ def configure_cluster(worker_hosts=None, task_index=-1):
 
   Args:
     worker_hosts: comma-separated list of worker ip:port pairs.
+    task_index: index of the worker.
 
   Returns:
     Number of workers in the cluster.

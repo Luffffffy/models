@@ -54,8 +54,7 @@ class FakeModel(model.DetectionModel):
             value=conv_weight_scalar))
 
   def preprocess(self, inputs):
-    true_image_shapes = []  # Doesn't matter for the fake model.
-    return tf.identity(inputs), true_image_shapes
+    return tf.identity(inputs), exporter_lib_v2.get_true_shapes(inputs)
 
   def predict(self, preprocessed_inputs, true_image_shapes):
     return {'image': self._conv(preprocessed_inputs)}
@@ -139,6 +138,7 @@ class GenerateEmbeddingData(tf.test.TestCase):
     with mock.patch.object(
         model_builder, 'build', autospec=True) as mock_builder:
       mock_builder.return_value = FakeModel()
+      exporter_lib_v2.INPUT_BUILDER_UTIL_MAP['model_build'] = mock_builder
       output_directory = os.path.join(tmp_dir, 'output')
       pipeline_config = pipeline_pb2.TrainEvalPipelineConfig()
       exporter_lib_v2.export_inference_graph(
@@ -306,12 +306,14 @@ class GenerateEmbeddingData(tf.test.TestCase):
       top_k_embedding_count = 1
       bottom_k_embedding_count = 0
       num_shards = 1
+      embedding_type = 'final_box_features'
       pipeline_options = beam.options.pipeline_options.PipelineOptions(
           runner='DirectRunner')
       p = beam.Pipeline(options=pipeline_options)
       generate_embedding_data.construct_pipeline(
           p, input_tfrecord, output_tfrecord, saved_model_path,
-          top_k_embedding_count, bottom_k_embedding_count, num_shards)
+          top_k_embedding_count, bottom_k_embedding_count, num_shards,
+          embedding_type)
       p.run()
       filenames = tf.io.gfile.glob(
           output_tfrecord + '-?????-of-?????')

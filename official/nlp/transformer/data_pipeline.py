@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Input pipeline for the transformer model to read, filter, and batch examples.
 
 Two things to note in the pipeline:
@@ -46,10 +46,6 @@ Two things to note in the pipeline:
    `parallel_interleave`, the `sloppy` argument is used to generate randomness
    in the order of the examples.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import os
 
@@ -246,7 +242,7 @@ def _read_and_batch_from_files(file_pattern,
       num_parallel_calls=tf.data.experimental.AUTOTUNE).with_options(options)
 
   # Parse each tf.Example into a dictionary
-  # TODO: Look into prefetch_input_elements for performance optimization.
+  # TODO: Look into prefetch_input_elements for performance optimization.  # pylint: disable=g-bad-todo
   dataset = dataset.map(
       _parse_example, num_parallel_calls=tf.data.experimental.AUTOTUNE)
 

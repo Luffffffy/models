@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,12 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
-"""A parameter dictionary class which supports the nest structure."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""A parameter dictionary class which supports the nest structure."""
 
 import collections
 import copy
@@ -73,7 +69,6 @@ class ParamsDict(object):
     if default_params is None:
       default_params = {}
     self.override(default_params, is_strict=False)
-    self.validate()
 
   def _set(self, k, v):
     if isinstance(v, dict):
@@ -317,7 +312,7 @@ class ParamsDict(object):
 def read_yaml_to_params_dict(file_path):
   """Reads a YAML file to a ParamsDict."""
   with tf.io.gfile.GFile(file_path, 'r') as f:
-    params_dict = yaml.load(f, Loader=yaml.FullLoader)
+    params_dict = yaml.load(f, Loader=yaml.SafeLoader)
     return ParamsDict(params_dict)
 
 

@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Dataclasses for optimization configs.
 
 This file define the dataclass for optimization configs (OptimizationConfig).
@@ -40,6 +39,7 @@ class OptimizerConfig(oneof.OneOfConfig):
     adamw: adam with weight decay.
     lamb: lamb optimizer.
     rmsprop: rmsprop optimizer.
+    lars: lars optimizer.
   """
   type: Optional[str] = None
   sgd: opt_cfg.SGDConfig = opt_cfg.SGDConfig()
@@ -47,6 +47,7 @@ class OptimizerConfig(oneof.OneOfConfig):
   adamw: opt_cfg.AdamWeightDecayConfig = opt_cfg.AdamWeightDecayConfig()
   lamb: opt_cfg.LAMBConfig = opt_cfg.LAMBConfig()
   rmsprop: opt_cfg.RMSPropConfig = opt_cfg.RMSPropConfig()
+  lars: opt_cfg.LARSConfig = opt_cfg.LARSConfig()
 
 
 @dataclasses.dataclass
@@ -61,6 +62,9 @@ class LrConfig(oneof.OneOfConfig):
     polynomial: polynomial learning rate config.
     cosine: cosine learning rate config.
     power: step^power learning rate config.
+    power_linear: learning rate config of step^power followed by
+      step^power*linear.
+    power_with_offset: power decay with a step offset.
   """
   type: Optional[str] = None
   constant: lr_cfg.ConstantLrConfig = lr_cfg.ConstantLrConfig()
@@ -69,6 +73,10 @@ class LrConfig(oneof.OneOfConfig):
   polynomial: lr_cfg.PolynomialLrConfig = lr_cfg.PolynomialLrConfig()
   cosine: lr_cfg.CosineLrConfig = lr_cfg.CosineLrConfig()
   power: lr_cfg.DirectPowerLrConfig = lr_cfg.DirectPowerLrConfig()
+  power_linear: lr_cfg.PowerAndLinearDecayLrConfig = (
+      lr_cfg.PowerAndLinearDecayLrConfig())
+  power_with_offset: lr_cfg.PowerDecayWithOffsetLrConfig = (
+      lr_cfg.PowerDecayWithOffsetLrConfig())
 
 
 @dataclasses.dataclass

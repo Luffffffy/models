@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Util functions related to pycocotools and COCO eval."""
 
 import copy
@@ -211,8 +211,14 @@ def convert_groundtruths_to_coco_dataset(groundtruths, label_map=None):
   num_batches = len(groundtruths['source_id'])
   batch_size = groundtruths['source_id'][0].shape[0]
   for i in range(num_batches):
+    max_num_instances = groundtruths['classes'][i].shape[1]
     for j in range(batch_size):
       num_instances = groundtruths['num_detections'][i][j]
+      if num_instances > max_num_instances:
+        logging.warning(
+            'num_groundtruths is larger than max_num_instances, %d v.s. %d',
+            num_instances, max_num_instances)
+        num_instances = max_num_instances
       for k in range(int(num_instances)):
         ann = {}
         ann['image_id'] = int(groundtruths['source_id'][i][j])

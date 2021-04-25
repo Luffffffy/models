@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,12 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
-"""BERT models that are compatible with TF 2.0."""
 
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
+"""BERT models that are compatible with TF 2.0."""
 
 import gin
 import tensorflow as tf
@@ -167,7 +163,7 @@ def get_transformer_encoder(bert_config,
       initializer=tf.keras.initializers.TruncatedNormal(
           stddev=bert_config.initializer_range))
   if isinstance(bert_config, albert_configs.AlbertConfig):
-    return networks.AlbertTransformerEncoder(**kwargs)
+    return networks.AlbertEncoder(**kwargs)
   else:
     assert isinstance(bert_config, configs.BertConfig)
     kwargs['output_range'] = output_range

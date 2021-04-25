@@ -1,4 +1,4 @@
-# Copyright 2019 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Keras-based transformer block layer."""
 # pylint: disable=g-classes-have-attributes
 
@@ -25,13 +25,13 @@ from official.nlp.modeling.layers.util import tf_function_if_eager
 
 
 @tf.keras.utils.register_keras_serializable(package="Text")
-class Transformer(keras_nlp.TransformerEncoderBlock):
+class Transformer(keras_nlp.layers.TransformerEncoderBlock):
   """Transformer layer.
 
   This layer implements the Transformer from "Attention Is All You Need".
   (https://arxiv.org/abs/1706.03762).
 
-  Arguments:
+  Args:
     num_attention_heads: Number of attention heads.
     intermediate_size: Size of the intermediate layer.
     intermediate_activation: Activation for the intermediate layer.
@@ -77,7 +77,7 @@ class Transformer(keras_nlp.TransformerEncoderBlock):
                intermediate_dropout=0.0,
                attention_initializer=None,
                **kwargs):
-    super(Transformer, self).__init__(
+    super().__init__(
         num_attention_heads=num_attention_heads,
         inner_dim=intermediate_size,
         inner_activation=intermediate_activation,
@@ -105,11 +105,11 @@ class CompiledTransformer(Transformer):
 
   @tf_function_if_eager(experimental_compile=True)
   def call(self, inputs):
-    return super(CompiledTransformer, self).call(inputs)
+    return super().call(inputs)
 
 
 @tf.keras.utils.register_keras_serializable(package="Text")
-class TransformerDecoderLayer(tf.keras.layers.Layer):
+class TransformerDecoderBlock(tf.keras.layers.Layer):
   """Single transformer layer for decoder.
 
   It has three sub-layers:
@@ -117,7 +117,7 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
   (2) a encoder-decoder attention.
   (3) a positionwise fully connected feed-forward network.
 
-  Arguments:
+  Args:
     num_attention_heads: Number of attention heads.
     intermediate_size: Size of the intermediate layer.
     intermediate_activation: Activation for the intermediate layer.
@@ -163,7 +163,7 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
                intermediate_dropout=0.0,
                attention_initializer=None,
                **kwargs):
-    super(TransformerDecoderLayer, self).__init__(**kwargs)
+    super().__init__(**kwargs)
     self.num_attention_heads = num_attention_heads
     self.intermediate_size = intermediate_size
     self.intermediate_activation = tf.keras.activations.get(
@@ -202,7 +202,7 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
       raise ValueError(
           "The hidden size (%d) is not a multiple of the number of attention "
           "heads (%d)" % (hidden_size, self.num_attention_heads))
-    self.attention_head_size = int(hidden_size / self.num_attention_heads)
+    self.attention_head_size = int(hidden_size) // self.num_attention_heads
     common_kwargs = dict(
         bias_initializer=self._bias_initializer,
         kernel_regularizer=self._kernel_regularizer,
@@ -232,7 +232,8 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
         tf.keras.layers.LayerNormalization(
             name="self_attention_layer_norm",
             axis=-1,
-            epsilon=self._norm_epsilon))
+            epsilon=self._norm_epsilon,
+            dtype="float32"))
     # Encoder-decoder attention.
     self.encdec_attention = self._cross_attention_cls(
         num_heads=self.num_attention_heads,
@@ -250,7 +251,8 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
         tf.keras.layers.LayerNormalization(
             name="attention/encdec_output_layer_norm",
             axis=-1,
-            epsilon=self._norm_epsilon))
+            epsilon=self._norm_epsilon,
+            dtype="float32"))
 
     # Feed-forward projection.
     self.intermediate_dense = tf.keras.layers.experimental.EinsumDense(
@@ -273,8 +275,9 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
         **common_kwargs)
     self.output_dropout = tf.keras.layers.Dropout(rate=self.dropout_rate)
     self.output_layer_norm = tf.keras.layers.LayerNormalization(
-        name="output_layer_norm", axis=-1, epsilon=self._norm_epsilon)
-    super(TransformerDecoderLayer, self).build(input_shape)
+        name="output_layer_norm", axis=-1,
+        epsilon=self._norm_epsilon, dtype="float32")
+    super().build(input_shape)
 
   def get_config(self):
     config = {
@@ -315,7 +318,7 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
         "attention_initializer":
             tf.keras.initializers.serialize(self._attention_initializer)
     }
-    base_config = super(TransformerDecoderLayer, self).get_config()
+    base_config = super().get_config()
     return dict(list(base_config.items()) + list(config.items()))
 
   def common_layers_with_encoder(self):
@@ -329,11 +332,11 @@ class TransformerDecoderLayer(tf.keras.layers.Layer):
     if self.multi_channel_cross_attention:
       if len(inputs) != 5:
         raise ValueError(
-            "TransformerDecoderLayer must have 5 inputs, when it uses "
+            "TransformerDecoderBlock must have 5 inputs, when it uses "
             "multi_channel_cross_attention. But it got: %d" % len(inputs))
     elif len(inputs) != 4:
       raise ValueError(
-          "TransformerDecoderLayer must have 4 inputs, but it got: %d" %
+          "TransformerDecoderBlock must have 4 inputs, but it got: %d" %
           len(inputs))
     input_tensor, memory, attention_mask, self_attention_mask = inputs[:4]
     source_tensor = input_tensor

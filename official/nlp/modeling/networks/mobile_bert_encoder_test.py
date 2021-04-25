@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 from absl.testing import parameterized
 
 import numpy as np
@@ -21,7 +21,7 @@ from official.nlp.modeling.networks import mobile_bert_encoder
 
 
 def generate_fake_input(batch_size=1, seq_len=5, vocab_size=10000, seed=0):
-  """Generate consisitant fake integer input sequences."""
+  """Generate consistent fake integer input sequences."""
   np.random.seed(seed)
   fake_input = []
   for _ in range(batch_size):
@@ -33,64 +33,6 @@ def generate_fake_input(batch_size=1, seq_len=5, vocab_size=10000, seed=0):
 
 
 class MobileBertEncoderTest(parameterized.TestCase, tf.test.TestCase):
-
-  def test_embedding_layer_with_token_type(self):
-    layer = mobile_bert_encoder.MobileBertEmbedding(10, 8, 2, 16)
-    input_seq = tf.Variable([[2, 3, 4, 5]])
-    token_type = tf.Variable([[0, 1, 1, 1]])
-    output = layer(input_seq, token_type)
-    output_shape = output.shape.as_list()
-    expected_shape = [1, 4, 16]
-    self.assertListEqual(output_shape, expected_shape, msg=None)
-
-  def test_embedding_layer_without_token_type(self):
-    layer = mobile_bert_encoder.MobileBertEmbedding(10, 8, 2, 16)
-    input_seq = tf.Variable([[2, 3, 4, 5]])
-    output = layer(input_seq)
-    output_shape = output.shape.as_list()
-    expected_shape = [1, 4, 16]
-    self.assertListEqual(output_shape, expected_shape, msg=None)
-
-  def test_no_norm(self):
-    layer = mobile_bert_encoder.NoNorm()
-    feature = tf.random.normal([2, 3, 4])
-    output = layer(feature)
-    output_shape = output.shape.as_list()
-    expected_shape = [2, 3, 4]
-    self.assertListEqual(output_shape, expected_shape, msg=None)
-
-  @parameterized.named_parameters(('with_kq_shared_bottleneck', False),
-                                  ('without_kq_shared_bottleneck', True))
-  def test_transfomer_kq_shared_bottleneck(self, is_kq_shared):
-    feature = tf.random.uniform([2, 3, 512])
-    layer = mobile_bert_encoder.TransformerLayer(
-        key_query_shared_bottleneck=is_kq_shared)
-    output = layer(feature)
-    output_shape = output.shape.as_list()
-    expected_shape = [2, 3, 512]
-    self.assertListEqual(output_shape, expected_shape, msg=None)
-
-  def test_transfomer_with_mask(self):
-    feature = tf.random.uniform([2, 3, 512])
-    input_mask = [[[0., 0., 1.], [0., 0., 1.], [0., 0., 1.]],
-                  [[0., 1., 1.], [0., 1., 1.], [0., 1., 1.]]]
-    input_mask = np.asarray(input_mask)
-    layer = mobile_bert_encoder.TransformerLayer()
-    output = layer(feature, input_mask)
-    output_shape = output.shape.as_list()
-    expected_shape = [2, 3, 512]
-    self.assertListEqual(output_shape, expected_shape, msg=None)
-
-  def test_transfomer_return_attention_score(self):
-    sequence_length = 5
-    num_attention_heads = 8
-    feature = tf.random.uniform([2, sequence_length, 512])
-    layer = mobile_bert_encoder.TransformerLayer(
-        num_attention_heads=num_attention_heads)
-    _, attention_score = layer(feature, return_attention_scores=True)
-    expected_shape = [2, num_attention_heads, sequence_length, sequence_length]
-    self.assertListEqual(
-        attention_score.shape.as_list(), expected_shape, msg=None)
 
   @parameterized.named_parameters(
       ('default_setting', 'relu', True, 'no_norm', False),
@@ -147,7 +89,8 @@ class MobileBertEncoderTest(parameterized.TestCase, tf.test.TestCase):
     self.assertIsInstance(all_layer_output, list)
     self.assertLen(all_layer_output, num_blocks + 1)
 
-  def test_mobilebert_encoder_invocation(self):
+  @parameterized.parameters('int32', 'float32')
+  def test_mobilebert_encoder_invocation(self, input_mask_dtype):
     vocab_size = 100
     hidden_size = 32
     sequence_length = 16
@@ -155,10 +98,11 @@ class MobileBertEncoderTest(parameterized.TestCase, tf.test.TestCase):
     test_network = mobile_bert_encoder.MobileBERTEncoder(
         word_vocab_size=vocab_size,
         hidden_size=hidden_size,
-        num_blocks=num_blocks)
+        num_blocks=num_blocks,
+        input_mask_dtype=input_mask_dtype)
 
     word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
-    mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
+    mask = tf.keras.Input(shape=(sequence_length,), dtype=input_mask_dtype)
     type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
     outputs = test_network([word_ids, mask, type_ids])
     model = tf.keras.Model([word_ids, mask, type_ids], outputs)
@@ -216,6 +160,8 @@ class MobileBertEncoderTest(parameterized.TestCase, tf.test.TestCase):
     mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
     type_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
     prediction = classifier([word_ids, mask, type_ids])
+    if task == models.BertTokenClassifier:
+      prediction = prediction['logits']
     self.assertAllEqual(prediction.shape.as_list(), prediction_shape)
 
 

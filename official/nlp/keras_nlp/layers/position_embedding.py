@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Keras-based positional embedding layer."""
 # pylint: disable=g-classes-have-attributes
 import tensorflow as tf
 
 
-@tf.keras.utils.register_keras_serializable(package="Text")
+@tf.keras.utils.register_keras_serializable(package="keras_nlp")
 class PositionEmbedding(tf.keras.layers.Layer):
   """Creates a positional embedding.
 
@@ -29,7 +29,7 @@ class PositionEmbedding(tf.keras.layers.Layer):
   ```
 
 
-  Arguments:
+  Args:
     max_length: The maximum size of the dynamic sequence.
     initializer: The initializer to use for the embedding weights. Defaults to
       "glorot_uniform".

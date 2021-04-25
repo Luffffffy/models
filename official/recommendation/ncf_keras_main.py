@@ -1,4 +1,4 @@
-# Copyright 2018 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,16 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """NCF framework to train and evaluate the NeuMF model.
 
 The NeuMF model assembles both MF and MLP models under the NCF framework. Check
 `neumf_model.py` for more details about the models.
 """
-
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
 
 import json
 import os
@@ -30,7 +26,7 @@ import os
 from absl import app
 from absl import flags
 from absl import logging
-import tensorflow.compat.v2 as tf
+import tensorflow as tf
 # pylint: enable=g-bad-import-order
 
 from official.common import distribute_utils
@@ -220,10 +216,7 @@ def run_ncf(_):
   model_helpers.apply_clean(FLAGS)
 
   if FLAGS.dtype == "fp16" and FLAGS.fp16_implementation == "keras":
-    policy = tf.keras.mixed_precision.experimental.Policy(
-        "mixed_float16",
-        loss_scale=flags_core.get_loss_scale(FLAGS, default_for_fp16="dynamic"))
-    tf.keras.mixed_precision.experimental.set_policy(policy)
+    tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
   strategy = distribute_utils.get_distribution_strategy(
       distribution_strategy=FLAGS.distribution_strategy,
@@ -284,12 +277,17 @@ def run_ncf(_):
             optimizer,
             loss_scale=flags_core.get_loss_scale(FLAGS,
                                                  default_for_fp16="dynamic"))
-    elif FLAGS.dtype == "fp16" and params["keras_use_ctl"]:
-      # When keras_use_ctl is False, instead Model.fit() automatically applies
-      # loss scaling so we don't need to create a LossScaleOptimizer.
-      optimizer = tf.keras.mixed_precision.experimental.LossScaleOptimizer(
-          optimizer,
-          tf.keras.mixed_precision.experimental.global_policy().loss_scale)
+    elif FLAGS.dtype == "fp16":
+      loss_scale = flags_core.get_loss_scale(FLAGS, default_for_fp16="dynamic")
+      # Note Model.compile automatically wraps the optimizer with a
+      # LossScaleOptimizer using dynamic loss scaling. We explicitly wrap it
+      # here for the case where a custom training loop or fixed loss scale is
+      # used.
+      if loss_scale == "dynamic":
+        optimizer = tf.keras.mixed_precision.LossScaleOptimizer(optimizer)
+      else:
+        optimizer = tf.keras.mixed_precision.LossScaleOptimizer(
+            optimizer, dynamic=False, initial_scale=loss_scale)
 
     if params["keras_use_ctl"]:
       train_loss, eval_results = run_ncf_custom_training(

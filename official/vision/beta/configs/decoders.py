@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,9 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
+# Lint as: python3
 """Decoders configurations."""
-from typing import Optional
+from typing import Optional, List
 
 # Import libraries
 import dataclasses
@@ -36,13 +36,33 @@ class FPN(hyperparams.Config):
 
 
 @dataclasses.dataclass
+class NASFPN(hyperparams.Config):
+  """NASFPN config."""
+  num_filters: int = 256
+  num_repeats: int = 5
+  use_separable_conv: bool = False
+
+
+@dataclasses.dataclass
+class ASPP(hyperparams.Config):
+  """ASPP config."""
+  level: int = 4
+  dilation_rates: List[int] = dataclasses.field(default_factory=list)
+  dropout_rate: float = 0.0
+  num_filters: int = 256
+  pool_kernel_size: Optional[List[int]] = None  # Use global average pooling.
+
+
+@dataclasses.dataclass
 class Decoder(hyperparams.OneOfConfig):
   """Configuration for decoders.
 
   Attributes:
-    type: 'str', type of decoder be used, on the of fields below.
+    type: 'str', type of decoder be used, one of the fields below.
     fpn: fpn config.
   """
   type: Optional[str] = None
   fpn: FPN = FPN()
+  nasfpn: NASFPN = NASFPN()
   identity: Identity = Identity()
+  aspp: ASPP = ASPP()

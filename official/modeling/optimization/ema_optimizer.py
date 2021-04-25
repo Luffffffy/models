@@ -1,4 +1,4 @@
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
 """Exponential moving average optimizer."""
 
 from typing import Text, List
@@ -70,7 +70,7 @@ class ExponentialMovingAverage(tf.keras.optimizers.Optimizer):
       **kwargs: keyword arguments. Allowed to be {`clipnorm`,
         `clipvalue`, `lr`, `decay`}.
     """
-    super(ExponentialMovingAverage, self).__init__(name, **kwargs)
+    super().__init__(name, **kwargs)
     self._average_decay = average_decay
     self._start_step = tf.constant(start_step, tf.float32)
     self._dynamic_decay = dynamic_decay

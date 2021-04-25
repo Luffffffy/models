@@ -1,5 +1,4 @@
-# Lint as: python3
-# Copyright 2020 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# ==============================================================================
+
+# Lint as: python3
 """Tests for instance_heads.py."""
 
 # Import libraries
@@ -119,6 +119,16 @@ class MaskHeadTest(parameterized.TestCase, tf.test.TestCase):
     new_mask_head = instance_heads.MaskHead.from_config(config)
     self.assertAllEqual(
         mask_head.get_config(), new_mask_head.get_config())
+
+  def test_forward_class_agnostic(self):
+    mask_head = instance_heads.MaskHead(
+        num_classes=3,
+        class_agnostic=True
+    )
+    roi_features = np.random.rand(2, 10, 14, 14, 16)
+    roi_classes = np.zeros((2, 10))
+    masks = mask_head([roi_features, roi_classes])
+    self.assertAllEqual(masks.numpy().shape, [2, 10, 28, 28])
 
 
 if __name__ == '__main__':

@@ -104,6 +104,7 @@ class ImageClassificationTask(base_task.Task):
         num_classes=num_classes,
         image_field_key=image_field_key,
         label_field_key=label_field_key,
+        decode_jpeg_only=params.decode_jpeg_only,
         aug_rand_hflip=params.aug_rand_hflip,
         aug_type=params.aug_type,
         is_multilabel=is_multilabel,
@@ -187,7 +188,7 @@ class ImageClassificationTask(base_task.Task):
                 multi_label=False,
                 from_logits=True),
             tf.keras.metrics.AUC(
-                name='meanlPR-AUC',
+                name='meanPR-AUC',
                 curve='PR',
                 multi_label=True,
                 num_labels=self.task_config.model.num_classes,

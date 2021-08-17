@@ -342,9 +342,10 @@ Berkin Akin, Suyog Gupta, and Andrew Howard
 """
 MNMultiMAX_BLOCK_SPECS = {
     'spec_name': 'MobileNetMultiMAX',
-    'block_spec_schema': ['block_fn', 'kernel_size', 'strides', 'filters',
-                          'activation', 'expand_ratio',
-                          'use_normalization', 'use_bias', 'is_output'],
+    'block_spec_schema': [
+        'block_fn', 'kernel_size', 'strides', 'filters', 'activation',
+        'expand_ratio', 'use_normalization', 'use_bias', 'is_output'
+    ],
     'block_specs': [
         ('convbn', 3, 2, 32, 'relu', None, True, False, False),
         ('invertedbottleneck', 3, 2, 32, 'relu', 3., None, False, True),
@@ -363,15 +364,18 @@ MNMultiMAX_BLOCK_SPECS = {
         ('invertedbottleneck', 5, 1, 160, 'relu', 4., None, False, True),
         ('convbn', 1, 1, 960, 'relu', None, True, False, False),
         ('gpooling', None, None, None, None, None, None, None, False),
-        ('convbn', 1, 1, 1280, 'relu', None, False, True, False),
+        # Remove bias and add batch norm for the last layer to support QAT
+        # and achieve slightly better accuracy.
+        ('convbn', 1, 1, 1280, 'relu', None, True, False, False),
     ]
 }
 
 MNMultiAVG_BLOCK_SPECS = {
     'spec_name': 'MobileNetMultiAVG',
-    'block_spec_schema': ['block_fn', 'kernel_size', 'strides', 'filters',
-                          'activation', 'expand_ratio',
-                          'use_normalization', 'use_bias', 'is_output'],
+    'block_spec_schema': [
+        'block_fn', 'kernel_size', 'strides', 'filters', 'activation',
+        'expand_ratio', 'use_normalization', 'use_bias', 'is_output'
+    ],
     'block_specs': [
         ('convbn', 3, 2, 32, 'relu', None, True, False, False),
         ('invertedbottleneck', 3, 2, 32, 'relu', 3., None, False, False),
@@ -392,7 +396,9 @@ MNMultiAVG_BLOCK_SPECS = {
         ('invertedbottleneck', 5, 1, 192, 'relu', 4., None, False, True),
         ('convbn', 1, 1, 960, 'relu', None, True, False, False),
         ('gpooling', None, None, None, None, None, None, None, False),
-        ('convbn', 1, 1, 1280, 'relu', None, False, True, False),
+        # Remove bias and add batch norm for the last layer to support QAT
+        # and achieve slightly better accuracy.
+        ('convbn', 1, 1, 1280, 'relu', None, True, False, False),
     ]
 }
 
@@ -592,8 +598,9 @@ class MobileNet(tf.keras.Model):
 
     x, endpoints, next_endpoint_level = self._mobilenet_base(inputs=inputs)
 
-    endpoints[str(next_endpoint_level)] = x
     self._output_specs = {l: endpoints[l].get_shape() for l in endpoints}
+    # Don't include the final layer in `self._output_specs` to support decoders.
+    endpoints[str(next_endpoint_level)] = x
 
     super(MobileNet, self).__init__(
         inputs=inputs, outputs=endpoints, **kwargs)

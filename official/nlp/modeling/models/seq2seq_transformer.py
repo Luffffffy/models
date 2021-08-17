@@ -111,13 +111,15 @@ class Seq2SeqTransformer(tf.keras.Model):
 
   def _embedding_linear(self, embedding_matrix, x):
     """Uses embeddings as linear transformation weights."""
+    embedding_matrix = tf.cast(embedding_matrix, dtype=self.compute_dtype)
+    x = tf.cast(x, dtype=self.compute_dtype)
     batch_size = tf.shape(x)[0]
     length = tf.shape(x)[1]
     hidden_size = tf.shape(x)[2]
     vocab_size = tf.shape(embedding_matrix)[0]
 
     x = tf.reshape(x, [-1, hidden_size])
-    logits = tf.matmul(x, tf.cast(embedding_matrix, x.dtype), transpose_b=True)
+    logits = tf.matmul(x, embedding_matrix, transpose_b=True)
 
     return tf.reshape(logits, [batch_size, length, vocab_size])
 
@@ -542,7 +544,8 @@ class TransformerDecoder(tf.keras.layers.Layer):
            self_attention_mask=None,
            cross_attention_mask=None,
            cache=None,
-           decode_loop_step=None):
+           decode_loop_step=None,
+           return_all_decoder_outputs=False):
     """Return the output of the decoder layer stacks.
 
     Args:
@@ -559,6 +562,9 @@ class TransformerDecoder(tf.keras.layers.Layer):
                      ...}
       decode_loop_step: An integer, the step number of the decoding loop. Used
         only for autoregressive inference on TPU.
+      return_all_decoder_outputs: Return all decoder layer outputs.
+        Note that the outputs are layer normed.
+        This is useful when introducing per layer auxiliary loss.
 
     Returns:
       Output of decoder.
@@ -566,6 +572,7 @@ class TransformerDecoder(tf.keras.layers.Layer):
     """
 
     output_tensor = target
+    decoder_outputs = []
     for layer_idx in range(self.num_layers):
       transformer_inputs = [
           output_tensor, memory, cross_attention_mask, self_attention_mask
@@ -579,7 +586,13 @@ class TransformerDecoder(tf.keras.layers.Layer):
             transformer_inputs,
             cache=cache[cache_layer_idx],
             decode_loop_step=decode_loop_step)
-    return self.output_normalization(output_tensor)
+      if return_all_decoder_outputs:
+        decoder_outputs.append(self.output_normalization(output_tensor))
+
+    if return_all_decoder_outputs:
+      return decoder_outputs
+    else:
+      return self.output_normalization(output_tensor)
 
 
 def attention_initializer(hidden_size):

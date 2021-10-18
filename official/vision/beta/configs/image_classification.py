@@ -39,10 +39,13 @@ class DataConfig(cfg.DataConfig):
   aug_rand_hflip: bool = True
   aug_type: Optional[
       common.Augmentation] = None  # Choose from AutoAugment and RandAugment.
+  color_jitter: float = 0.
+  random_erasing: Optional[common.RandomErasing] = None
   file_type: str = 'tfrecord'
   image_field_key: str = 'image/encoded'
   label_field_key: str = 'image/class/label'
   decode_jpeg_only: bool = True
+  mixup_and_cutmix: Optional[common.MixupAndCutmix] = None
   decoder: Optional[common.DataDecoder] = common.DataDecoder()
 
   # Keep for backward compatibility.
@@ -62,6 +65,7 @@ class ImageClassificationModel(hyperparams.Config):
       use_sync_bn=False)
   # Adds a BatchNormalization layer pre-GlobalAveragePooling in classification
   add_head_batch_norm: bool = False
+  kernel_initializer: str = 'random_uniform'
 
 
 @dataclasses.dataclass
@@ -69,6 +73,7 @@ class Losses(hyperparams.Config):
   one_hot: bool = True
   label_smoothing: float = 0.0
   l2_weight_decay: float = 0.0
+  soft_labels: bool = False
 
 
 @dataclasses.dataclass
@@ -114,6 +119,7 @@ def image_classification_imagenet() -> cfg.ExperimentConfig:
   eval_batch_size = 4096
   steps_per_epoch = IMAGENET_TRAIN_EXAMPLES // train_batch_size
   config = cfg.ExperimentConfig(
+      runtime=cfg.RuntimeConfig(enable_xla=True),
       task=ImageClassificationTask(
           model=ImageClassificationModel(
               num_classes=1001,

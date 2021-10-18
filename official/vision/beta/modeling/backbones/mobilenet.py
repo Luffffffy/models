@@ -14,10 +14,10 @@
 
 """Contains definitions of MobileNet Networks."""
 
+import dataclasses
 from typing import Optional, Dict, Any, Tuple
 
 # Import libraries
-import dataclasses
 import tensorflow as tf
 from official.modeling import hyperparams
 from official.modeling import tf_utils
@@ -402,6 +402,40 @@ MNMultiAVG_BLOCK_SPECS = {
     ]
 }
 
+# Similar to MobileNetMultiAVG and used for segmentation task.
+# Reduced the filters by a factor of 2 in the last block.
+MNMultiAVG_SEG_BLOCK_SPECS = {
+    'spec_name': 'MobileNetMultiAVGSeg',
+    'block_spec_schema': [
+        'block_fn', 'kernel_size', 'strides', 'filters', 'activation',
+        'expand_ratio', 'use_normalization', 'use_bias', 'is_output'
+    ],
+    'block_specs': [
+        ('convbn', 3, 2, 32, 'relu', None, True, False, False),
+        ('invertedbottleneck', 3, 2, 32, 'relu', 3., True, False, False),
+        ('invertedbottleneck', 3, 1, 32, 'relu', 2., True, False, True),
+        ('invertedbottleneck', 5, 2, 64, 'relu', 5., True, False, False),
+        ('invertedbottleneck', 3, 1, 64, 'relu', 3., True, False, False),
+        ('invertedbottleneck', 3, 1, 64, 'relu', 2., True, False, False),
+        ('invertedbottleneck', 3, 1, 64, 'relu', 3., True, False, True),
+        ('invertedbottleneck', 5, 2, 128, 'relu', 6., True, False, False),
+        ('invertedbottleneck', 3, 1, 128, 'relu', 3., True, False, False),
+        ('invertedbottleneck', 3, 1, 128, 'relu', 3., True, False, False),
+        ('invertedbottleneck', 3, 1, 128, 'relu', 3., True, False, False),
+        ('invertedbottleneck', 3, 1, 160, 'relu', 6., True, False, False),
+        ('invertedbottleneck', 3, 1, 160, 'relu', 4., True, False, True),
+        ('invertedbottleneck', 3, 2, 192, 'relu', 6., True, False, False),
+        ('invertedbottleneck', 5, 1, 96, 'relu', 2., True, False, False),
+        ('invertedbottleneck', 5, 1, 96, 'relu', 4., True, False, False),
+        ('invertedbottleneck', 5, 1, 96, 'relu', 4., True, False, True),
+        ('convbn', 1, 1, 480, 'relu', None, True, False, False),
+        ('gpooling', None, None, None, None, None, None, None, False),
+        # Remove bias and add batch norm for the last layer to support QAT
+        # and achieve slightly better accuracy.
+        ('convbn', 1, 1, 1280, 'relu', None, True, False, False),
+    ]
+}
+
 SUPPORTED_SPECS_MAP = {
     'MobileNetV1': MNV1_BLOCK_SPECS,
     'MobileNetV2': MNV2_BLOCK_SPECS,
@@ -410,6 +444,7 @@ SUPPORTED_SPECS_MAP = {
     'MobileNetV3EdgeTPU': MNV3EdgeTPU_BLOCK_SPECS,
     'MobileNetMultiMAX': MNMultiMAX_BLOCK_SPECS,
     'MobileNetMultiAVG': MNMultiAVG_BLOCK_SPECS,
+    'MobileNetMultiAVGSeg': MNMultiAVG_SEG_BLOCK_SPECS,
 }
 
 
@@ -517,6 +552,7 @@ class MobileNet(tf.keras.Model):
       use_sync_bn: bool = False,
       # finegrain is not used in MobileNetV1.
       finegrain_classification_mode: bool = True,
+      output_intermediate_endpoints: bool = False,
       **kwargs):
     """Initializes a MobileNet model.
 
@@ -554,6 +590,8 @@ class MobileNet(tf.keras.Model):
       finegrain_classification_mode: If True, the model will keep the last layer
         large even for small multipliers, following
         https://arxiv.org/abs/1801.04381.
+      output_intermediate_endpoints: A `bool` of whether or not output the
+        intermediate endpoints.
       **kwargs: Additional keyword arguments to be passed.
     """
     if model_id not in SUPPORTED_SPECS_MAP:
@@ -586,6 +624,7 @@ class MobileNet(tf.keras.Model):
     self._norm_momentum = norm_momentum
     self._norm_epsilon = norm_epsilon
     self._finegrain_classification_mode = finegrain_classification_mode
+    self._output_intermediate_endpoints = output_intermediate_endpoints
 
     inputs = tf.keras.Input(shape=input_specs.shape[1:])
 
@@ -658,6 +697,7 @@ class MobileNet(tf.keras.Model):
         layer_rate = 1
         current_stride *= block_def.strides
 
+      intermediate_endpoints = {}
       if block_def.block_fn == 'convbn':
 
         net = Conv2DBNBlock(
@@ -679,7 +719,7 @@ class MobileNet(tf.keras.Model):
         net = nn_blocks.DepthwiseSeparableConvBlock(
             filters=block_def.filters,
             kernel_size=block_def.kernel_size,
-            strides=block_def.strides,
+            strides=layer_stride,
             activation=block_def.activation,
             dilation_rate=layer_rate,
             regularize_depthwise=self._regularize_depthwise,
@@ -701,7 +741,7 @@ class MobileNet(tf.keras.Model):
           #   any 1x1 convolution).
           use_rate = layer_rate
         in_filters = net.shape.as_list()[-1]
-        net = nn_blocks.InvertedBottleneckBlock(
+        block = nn_blocks.InvertedBottleneckBlock(
             in_filters=in_filters,
             out_filters=block_def.filters,
             kernel_size=block_def.kernel_size,
@@ -722,8 +762,13 @@ class MobileNet(tf.keras.Model):
             norm_momentum=self._norm_momentum,
             norm_epsilon=self._norm_epsilon,
             stochastic_depth_drop_rate=self._stochastic_depth_drop_rate,
-            divisible_by=self._get_divisible_by()
-        )(net)
+            divisible_by=self._get_divisible_by(),
+            output_intermediate_endpoints=self._output_intermediate_endpoints,
+        )
+        if self._output_intermediate_endpoints:
+          net, intermediate_endpoints = block(net)
+        else:
+          net = block(net)
 
       elif block_def.block_fn == 'gpooling':
         net = layers.GlobalAveragePooling2D()(net)
@@ -737,8 +782,13 @@ class MobileNet(tf.keras.Model):
 
       if block_def.is_output:
         endpoints[str(endpoint_level)] = net
-        endpoint_level += 1
+        for key, tensor in intermediate_endpoints.items():
+          endpoints[str(endpoint_level) + '/' + key] = tensor
+        if current_stride != self._output_stride:
+          endpoint_level += 1
 
+    if str(endpoint_level) in endpoints:
+      endpoint_level += 1
     return net, endpoints, endpoint_level
 
   def get_config(self):
@@ -788,6 +838,8 @@ def build_mobilenet(
       filter_size_scale=backbone_cfg.filter_size_scale,
       input_specs=input_specs,
       stochastic_depth_drop_rate=backbone_cfg.stochastic_depth_drop_rate,
+      output_stride=backbone_cfg.output_stride,
+      output_intermediate_endpoints=backbone_cfg.output_intermediate_endpoints,
       use_sync_bn=norm_activation_config.use_sync_bn,
       norm_momentum=norm_activation_config.norm_momentum,
       norm_epsilon=norm_activation_config.norm_epsilon,

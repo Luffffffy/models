@@ -102,7 +102,7 @@ class RetinaNetHead(hyperparams.Config):
   num_convs: int = 4
   num_filters: int = 256
   use_separable_conv: bool = False
-  attribute_heads: Optional[List[AttributeHead]] = None
+  attribute_heads: List[AttributeHead] = dataclasses.field(default_factory=list)
 
 
 @dataclasses.dataclass
@@ -112,7 +112,7 @@ class DetectionGenerator(hyperparams.Config):
   pre_nms_score_threshold: float = 0.05
   nms_iou_threshold: float = 0.5
   max_num_detections: int = 100
-  use_batched_nms: bool = False
+  nms_version: str = 'v2'  # `v2`, `v1`, `batched`.
   use_cpu_nms: bool = False
 
 

@@ -469,6 +469,24 @@ class CenterNetMetaArchHelpersTest(test_case.TestCase, parameterized.TestCase):
     np.testing.assert_array_equal([1, 0, 2], x_inds[1])
     np.testing.assert_array_equal([1, 0, 0], channel_inds[1])
 
+  def test_top_k_feature_map_locations_very_large(self):
+    feature_map_np = np.zeros((2, 3, 3, 2), dtype=np.float32)
+    feature_map_np[0, 2, 0, 1] = 1.0
+
+    def graph_fn():
+      feature_map = tf.constant(feature_map_np)
+      feature_map.set_shape(tf.TensorShape([2, 3, None, 2]))
+      scores, y_inds, x_inds, channel_inds = (
+          cnma.top_k_feature_map_locations(
+              feature_map, max_pool_kernel_size=1, k=3000))
+      return scores, y_inds, x_inds, channel_inds
+    # graph execution will fail if large k's are not handled.
+    scores, y_inds, x_inds, channel_inds = self.execute(graph_fn, [])
+    self.assertEqual(scores.shape, (2, 18))
+    self.assertEqual(y_inds.shape, (2, 18))
+    self.assertEqual(x_inds.shape, (2, 18))
+    self.assertEqual(channel_inds.shape, (2, 18))
+
   def test_top_k_feature_map_locations_per_channel(self):
     feature_map_np = np.zeros((2, 3, 3, 2), dtype=np.float32)
     feature_map_np[0, 2, 0, 0] = 1.0  # Selected.
@@ -811,29 +829,29 @@ class CenterNetMetaArchHelpersTest(test_case.TestCase, parameterized.TestCase):
                             {'provide_keypoint_score': False})
   def test_prediction_to_multi_instance_keypoints(self, provide_keypoint_score):
     image_size = (9, 9)
-    keypoint_heatmap_np = np.zeros((1, image_size[0], image_size[1], 3, 4),
+    keypoint_heatmap_np = np.zeros((image_size[0], image_size[1], 3, 4),
                                    dtype=np.float32)
     # Instance 0.
-    keypoint_heatmap_np[0, 1, 1, 0, 0] = 0.9
-    keypoint_heatmap_np[0, 1, 7, 0, 1] = 0.9
-    keypoint_heatmap_np[0, 7, 1, 0, 2] = 0.9
-    keypoint_heatmap_np[0, 7, 7, 0, 3] = 0.9
+    keypoint_heatmap_np[1, 1, 0, 0] = 0.9
+    keypoint_heatmap_np[1, 7, 0, 1] = 0.9
+    keypoint_heatmap_np[7, 1, 0, 2] = 0.9
+    keypoint_heatmap_np[7, 7, 0, 3] = 0.9
     # Instance 1.
-    keypoint_heatmap_np[0, 2, 2, 1, 0] = 0.8
-    keypoint_heatmap_np[0, 2, 8, 1, 1] = 0.8
-    keypoint_heatmap_np[0, 8, 2, 1, 2] = 0.8
-    keypoint_heatmap_np[0, 8, 8, 1, 3] = 0.8
+    keypoint_heatmap_np[2, 2, 1, 0] = 0.8
+    keypoint_heatmap_np[2, 8, 1, 1] = 0.8
+    keypoint_heatmap_np[8, 2, 1, 2] = 0.8
+    keypoint_heatmap_np[8, 8, 1, 3] = 0.8
 
-    keypoint_offset_np = np.zeros((1, image_size[0], image_size[1], 8),
+    keypoint_offset_np = np.zeros((image_size[0], image_size[1], 8),
                                   dtype=np.float32)
-    keypoint_offset_np[0, 1, 1] = [0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    keypoint_offset_np[0, 1, 7] = [0.0, 0.0, 0.5, -0.5, 0.0, 0.0, 0.0, 0.0]
-    keypoint_offset_np[0, 7, 1] = [0.0, 0.0, 0.0, 0.0, -0.5, 0.5, 0.0, 0.0]
-    keypoint_offset_np[0, 7, 7] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.5, -0.5]
-    keypoint_offset_np[0, 2, 2] = [0.3, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-    keypoint_offset_np[0, 2, 8] = [0.0, 0.0, 0.3, -0.3, 0.0, 0.0, 0.0, 0.0]
-    keypoint_offset_np[0, 8, 2] = [0.0, 0.0, 0.0, 0.0, -0.3, 0.3, 0.0, 0.0]
-    keypoint_offset_np[0, 8, 8] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.3, -0.3]
+    keypoint_offset_np[1, 1] = [0.5, 0.5, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    keypoint_offset_np[1, 7] = [0.0, 0.0, 0.5, -0.5, 0.0, 0.0, 0.0, 0.0]
+    keypoint_offset_np[7, 1] = [0.0, 0.0, 0.0, 0.0, -0.5, 0.5, 0.0, 0.0]
+    keypoint_offset_np[7, 7] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.5, -0.5]
+    keypoint_offset_np[2, 2] = [0.3, 0.3, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    keypoint_offset_np[2, 8] = [0.0, 0.0, 0.3, -0.3, 0.0, 0.0, 0.0, 0.0]
+    keypoint_offset_np[8, 2] = [0.0, 0.0, 0.0, 0.0, -0.3, 0.3, 0.0, 0.0]
+    keypoint_offset_np[8, 8] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -0.3, -0.3]
 
     def graph_fn():
       keypoint_heatmap = tf.constant(keypoint_heatmap_np, dtype=tf.float32)
@@ -844,7 +862,7 @@ class CenterNetMetaArchHelpersTest(test_case.TestCase, parameterized.TestCase):
             cnma.prediction_tensors_to_multi_instance_kpts(
                 keypoint_heatmap,
                 keypoint_offset,
-                tf.reduce_max(keypoint_heatmap, axis=3)))
+                tf.reduce_max(keypoint_heatmap, axis=2)))
       else:
         (keypoint_cands, keypoint_scores) = (
             cnma.prediction_tensors_to_multi_instance_kpts(
@@ -1223,6 +1241,44 @@ class CenterNetMetaArchHelpersTest(test_case.TestCase, parameterized.TestCase):
 
     np.testing.assert_allclose(expected_refined_keypoints, refined_keypoints)
     np.testing.assert_allclose(expected_refined_scores, refined_scores)
+
+  def test_refine_keypoints_with_empty_regressed_keypoints(self):
+    regressed_keypoints_np = np.zeros((1, 0, 2, 2), dtype=np.float32)
+    keypoint_candidates_np = np.ones((1, 1, 2, 2), dtype=np.float32)
+    keypoint_scores_np = np.ones((1, 1, 2), dtype=np.float32)
+    num_keypoints_candidates_np = np.ones((1, 1), dtype=np.int32)
+    unmatched_keypoint_score = 0.1
+
+    def graph_fn():
+      regressed_keypoints = tf.constant(
+          regressed_keypoints_np, dtype=tf.float32)
+      keypoint_candidates = tf.constant(
+          keypoint_candidates_np, dtype=tf.float32)
+      keypoint_scores = tf.constant(keypoint_scores_np, dtype=tf.float32)
+      num_keypoint_candidates = tf.constant(num_keypoints_candidates_np,
+                                            dtype=tf.int32)
+      # The behavior of bboxes=None is different now. We provide the bboxes
+      # explicitly by using the regressed keypoints to create the same
+      # behavior.
+      regressed_keypoints_flattened = tf.reshape(
+          regressed_keypoints, [-1, 3, 2])
+      bboxes_flattened = keypoint_ops.keypoints_to_enclosing_bounding_boxes(
+          regressed_keypoints_flattened)
+      (refined_keypoints, refined_scores, _) = cnma.refine_keypoints(
+          regressed_keypoints,
+          keypoint_candidates,
+          keypoint_scores,
+          num_keypoint_candidates,
+          bboxes=bboxes_flattened,
+          unmatched_keypoint_score=unmatched_keypoint_score,
+          box_scale=1.2,
+          candidate_search_scale=0.3,
+          candidate_ranking_mode='min_distance')
+      return refined_keypoints, refined_scores
+
+    refined_keypoints, refined_scores = self.execute(graph_fn, [])
+    self.assertEqual(refined_keypoints.shape, (1, 0, 2, 2))
+    self.assertEqual(refined_scores.shape, (1, 0, 2))
 
   def test_refine_keypoints_without_bbox(self):
     regressed_keypoints_np = np.array(
@@ -3404,6 +3460,7 @@ class CenterNetMetaArch1dTest(test_case.TestCase, parameterized.TestCase):
     postprocess_output = arch.postprocess(predictions, true_shapes)
     losses_output = arch.loss(predictions, true_shapes)
 
+    self.assertIn('extracted_features', predictions)
     self.assertIn('%s/%s' % (cnma.LOSS_KEY_PREFIX, cnma.OBJECT_CENTER),
                   losses_output)
     self.assertEqual((), losses_output['%s/%s' % (

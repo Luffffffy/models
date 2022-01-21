@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -123,9 +123,9 @@ class RetinaNetModel(tf.keras.Model):
           {'backbone_{}'.format(k): v for k, v in features.items()})
     if self.decoder:
       features = self.decoder(features)
-      if output_intermediate_features:
-        outputs.update(
-            {'decoder_{}'.format(k): v for k, v in features.items()})
+    if output_intermediate_features:
+      outputs.update(
+          {'decoder_{}'.format(k): v for k, v in features.items()})
 
     # Dense prediction. `raw_attributes` can be empty.
     raw_scores, raw_boxes, raw_attributes = self.head(features)

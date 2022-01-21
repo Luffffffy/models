@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,6 +43,8 @@ def create_representative_dataset(
     task = tasks.image_classification.ImageClassificationTask(params.task)
   elif isinstance(params.task, configs.retinanet.RetinaNetTask):
     task = tasks.retinanet.RetinaNetTask(params.task)
+  elif isinstance(params.task, configs.maskrcnn.MaskRCNNTask):
+    task = tasks.maskrcnn.MaskRCNNTask(params.task)
   elif isinstance(params.task,
                   configs.semantic_segmentation.SemanticSegmentationTask):
     task = tasks.semantic_segmentation.SemanticSegmentationTask(params.task)

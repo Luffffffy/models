@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -101,9 +101,11 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
     ckpt_dir_or_file = self.task_config.init_checkpoint
     logging.info("Trying to load pretrained checkpoint from %s",
                  ckpt_dir_or_file)
-    if tf.io.gfile.isdir(ckpt_dir_or_file):
+    if ckpt_dir_or_file and tf.io.gfile.isdir(ckpt_dir_or_file):
       ckpt_dir_or_file = tf.train.latest_checkpoint(ckpt_dir_or_file)
     if not ckpt_dir_or_file:
+      logging.info("No checkpoint file found from %s. Will not load.",
+                   ckpt_dir_or_file)
       return
 
     if hasattr(model, "checkpoint_items"):
@@ -166,7 +168,7 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
     del training
     return []
 
-  def process_metrics(self, metrics, labels, model_outputs):
+  def process_metrics(self, metrics, labels, model_outputs, **kwargs):
     """Process and update metrics.
 
     Called when using custom training loop API.
@@ -177,6 +179,7 @@ class Task(tf.Module, metaclass=abc.ABCMeta):
       labels: a tensor or a nested structure of tensors.
       model_outputs: a tensor or a nested structure of tensors. For example,
         output of the keras model built by self.build_model.
+      **kwargs: other args.
     """
     for metric in metrics:
       metric.update_state(labels, model_outputs)

@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,7 +42,7 @@ class SegmentationHead3DTest(parameterized.TestCase, tf.test.TestCase):
         '1': np.random.rand(2, 128, 128, 128, 16),
         '2': np.random.rand(2, 64, 64, 64, 16),
     }
-    logits = head(backbone_features, decoder_features)
+    logits = head((backbone_features, decoder_features))
 
     if str(level) in decoder_features:
       self.assertAllEqual(logits.numpy().shape, [

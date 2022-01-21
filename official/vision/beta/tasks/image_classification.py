@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -169,6 +169,7 @@ class ImageClassificationTask(base_task.Task):
     if aux_losses:
       total_loss += tf.add_n(aux_losses)
 
+    total_loss = losses_config.loss_weight * total_loss
     return total_loss
 
   def build_metrics(self,

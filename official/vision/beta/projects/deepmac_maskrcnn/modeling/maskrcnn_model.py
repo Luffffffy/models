@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,6 @@ def resize_as(source, size):
   return tf.transpose(source, (0, 3, 1, 2))
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
 class DeepMaskRCNNModel(maskrcnn_model.MaskRCNNModel):
   """The Mask R-CNN model."""
 

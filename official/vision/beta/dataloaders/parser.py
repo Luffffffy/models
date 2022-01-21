@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,7 +55,7 @@ class Parser(object):
       is_training: a `bool` to indicate whether it is in training mode.
 
     Returns:
-      parse: a `callable` that takes the serialized examle and generate the
+      parse: a `callable` that takes the serialized example and generate the
         images, labels tuple where labels is a dict of Tensors that contains
         labels.
     """
@@ -67,3 +67,15 @@ class Parser(object):
         return self._parse_eval_data(decoded_tensors)
 
     return parse
+
+  @classmethod
+  def inference_fn(cls, inputs):
+    """Parses inputs for predictions.
+
+    Args:
+      inputs: A Tensor, or dictionary of Tensors.
+
+    Returns:
+      processed_inputs: An input tensor to the model.
+    """
+    pass

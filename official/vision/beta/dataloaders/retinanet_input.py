@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,11 +19,13 @@ into (image, labels) tuple for RetinaNet.
 """
 
 # Import libraries
+from absl import logging
 import tensorflow as tf
 
 from official.vision.beta.dataloaders import parser
 from official.vision.beta.dataloaders import utils
 from official.vision.beta.ops import anchor
+from official.vision.beta.ops import augment
 from official.vision.beta.ops import box_ops
 from official.vision.beta.ops import preprocess_ops
 
@@ -40,6 +42,7 @@ class Parser(parser.Parser):
                anchor_size,
                match_threshold=0.5,
                unmatched_threshold=0.5,
+               aug_type=None,
                aug_rand_hflip=False,
                aug_scale_min=1.0,
                aug_scale_max=1.0,
@@ -71,6 +74,8 @@ class Parser(parser.Parser):
       unmatched_threshold: `float` number between 0 and 1 representing the
         upper-bound threshold to assign negative labels for anchors. An anchor
         with a score below the threshold is labeled negative.
+      aug_type: An optional Augmentation object to choose from AutoAugment and
+        RandAugment.
       aug_rand_hflip: `bool`, if True, augment training with random horizontal
         flip.
       aug_scale_min: `float`, the minimum scale applied to `output_size` for
@@ -108,7 +113,28 @@ class Parser(parser.Parser):
     self._aug_scale_min = aug_scale_min
     self._aug_scale_max = aug_scale_max
 
-    # Data Augmentation with AutoAugment.
+    # Data augmentation with AutoAugment or RandAugment.
+    self._augmenter = None
+    if aug_type is not None:
+      if aug_type.type == 'autoaug':
+        logging.info('Using AutoAugment.')
+        self._augmenter = augment.AutoAugment(
+            augmentation_name=aug_type.autoaug.augmentation_name,
+            cutout_const=aug_type.autoaug.cutout_const,
+            translate_const=aug_type.autoaug.translate_const)
+      elif aug_type.type == 'randaug':
+        logging.info('Using RandAugment.')
+        self._augmenter = augment.RandAugment.build_for_detection(
+            num_layers=aug_type.randaug.num_layers,
+            magnitude=aug_type.randaug.magnitude,
+            cutout_const=aug_type.randaug.cutout_const,
+            translate_const=aug_type.randaug.translate_const,
+            prob_to_apply=aug_type.randaug.prob_to_apply,
+            exclude_ops=aug_type.randaug.exclude_ops)
+      else:
+        raise ValueError(f'Augmentation policy {aug_type.type} not supported.')
+
+    # Deprecated. Data Augmentation with AutoAugment.
     self._use_autoaugment = use_autoaugment
     self._autoaugment_policy_name = autoaugment_policy_name
 
@@ -138,9 +164,12 @@ class Parser(parser.Parser):
       for k, v in attributes.items():
         attributes[k] = tf.gather(v, indices)
 
-    # Gets original image and its size.
+    # Gets original image.
     image = data['image']
 
+    # Apply autoaug or randaug.
+    if self._augmenter is not None:
+      image, boxes = self._augmenter.distort_with_boxes(image, boxes)
     image_shape = tf.shape(input=image)[0:2]
 
     # Normalizes image with mean and std pixel values.

@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,10 +14,10 @@
 
 # Lint as: python3
 """Decoders configurations."""
-from typing import Optional, List
+import dataclasses
+from typing import List, Optional
 
 # Import libraries
-import dataclasses
 
 from official.modeling import hyperparams
 
@@ -53,6 +53,8 @@ class ASPP(hyperparams.Config):
   num_filters: int = 256
   use_depthwise_convolution: bool = False
   pool_kernel_size: Optional[List[int]] = None  # Use global average pooling.
+  spp_layer_version: str = 'v1'
+  output_tensor: bool = False
 
 
 @dataclasses.dataclass

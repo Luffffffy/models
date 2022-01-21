@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,11 +23,6 @@ from official.vision.beta.modeling.layers import nn_layers
 
 
 class NNLayersTest(parameterized.TestCase, tf.test.TestCase):
-
-  def test_hard_swish(self):
-    activation = tf.keras.layers.Activation('hard_swish')
-    output = activation(tf.constant([-3, -1.5, 0, 3]))
-    self.assertAllEqual(output, [0., -0.375, 0., 3.])
 
   def test_scale(self):
     scale = nn_layers.Scale(initializer=tf.keras.initializers.constant(10.))
@@ -405,6 +400,20 @@ class NNLayersTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAllClose(predicted,
                         [[[[[1.]]],
                           [[[3.]]]]])
+
+  @parameterized.parameters(
+      (None, []),
+      (None, [6, 12, 18]),
+      ([32, 32], [6, 12, 18]),
+  )
+  def test_aspp(self, pool_kernel_size, dilation_rates):
+    inputs = tf.keras.Input(shape=(64, 64, 128), dtype=tf.float32)
+    layer = nn_layers.SpatialPyramidPooling(
+        output_channels=256,
+        dilation_rates=dilation_rates,
+        pool_kernel_size=pool_kernel_size)
+    output = layer(inputs)
+    self.assertAllEqual([None, 64, 64, 256], output.shape)
 
 if __name__ == '__main__':
   tf.test.main()

@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,10 +17,12 @@
 The trainer derives from the Orbit `StandardTrainer` class.
 """
 from typing import Union
+
 import gin
 import orbit
 import tensorflow as tf
 
+from official.modeling import optimization
 from official.modeling.multitask import base_model
 from official.modeling.multitask import multitask
 
@@ -44,6 +46,11 @@ class MultiTaskBaseTrainer(orbit.StandardTrainer):
     self._training_losses = None
     self._training_metrics = None
     self._global_step = orbit.utils.create_global_step()
+
+    # Creates a shadow copy of the weights to store weights moving average.
+    if isinstance(self._optimizer, optimization.ExponentialMovingAverage
+                 ) and not self._optimizer.has_shadow_copy:
+      self._optimizer.shadow_copy(multi_task_model)
 
     if hasattr(self.multi_task_model, "checkpoint_items"):
       checkpoint_items = self.multi_task_model.checkpoint_items

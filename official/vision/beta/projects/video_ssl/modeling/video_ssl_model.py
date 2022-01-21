@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -27,7 +27,6 @@ from official.vision.beta.projects.video_ssl.configs import video_ssl as video_s
 layers = tf.keras.layers
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
 class VideoSSLModel(tf.keras.Model):
   """A video ssl model class builder."""
 

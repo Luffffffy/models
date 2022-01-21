@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,6 @@ from official.modeling import tf_utils
 from official.vision.beta.projects.deepmac_maskrcnn.modeling.heads import hourglass_network
 
 
-@tf.keras.utils.register_keras_serializable(package='Vision')
 class DeepMaskHead(tf.keras.layers.Layer):
   """Creates a mask head."""
 

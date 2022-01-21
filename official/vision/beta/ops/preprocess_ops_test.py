@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -224,6 +224,22 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
     labels = tf.constant(
         np.random.randint(low=0, high=num_boxes, size=(num_boxes,)), tf.int64)
     _ = preprocess_ops.random_crop(image, boxes, labels)
+
+  @parameterized.parameters(
+      ((640, 640, 3), (1000, 1000), None, (1000, 1000, 3)),
+      ((1280, 640, 3), 320, None, (640, 320, 3)),
+      ((640, 1280, 3), 320, None, (320, 640, 3)),
+      ((640, 640, 3), 320, 100, (100, 100, 3)))
+  def test_resize_image(self, input_shape, size, max_size, expected_shape):
+    resized_img, image_info = preprocess_ops.resize_image(
+        tf.zeros((input_shape)), size, max_size)
+    self.assertAllEqual(tf.shape(resized_img), expected_shape)
+    self.assertAllEqual(image_info[0], input_shape[:-1])
+    self.assertAllEqual(image_info[1], expected_shape[:-1])
+    self.assertAllEqual(
+        image_info[2],
+        np.array(expected_shape[:-1]) / np.array(input_shape[:-1]))
+    self.assertAllEqual(image_info[3], [0, 0])
 
 
 if __name__ == '__main__':

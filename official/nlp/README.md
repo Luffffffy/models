@@ -32,10 +32,10 @@ We provide SoTA model implementations, pre-trained models, training and
 evaluation examples, and command lines. Detail instructions can be found in the
 READMEs for specific papers.
 
-1.  [BERT](bert): [BERT: Pre-training of Deep Bidirectional Transformers for
+1.  [BERT](MODEL_GARDEN.md#available-model-configs): [BERT: Pre-training of Deep Bidirectional Transformers for
     Language Understanding](https://arxiv.org/abs/1810.04805) by Devlin et al.,
     2018
-2.  [ALBERT](albert):
+2.  [ALBERT](MODEL_GARDEN.md#available-model-configs):
     [A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942)
     by Lan et al., 2019
 3.  [XLNet](xlnet):
@@ -44,9 +44,6 @@ READMEs for specific papers.
 4.  [Transformer for translation](transformer):
     [Attention Is All You Need](https://arxiv.org/abs/1706.03762) by Vaswani et
     al., 2017
-5.  [NHNet](nhnet):
-    [Generating Representative Headlines for News Stories](https://arxiv.org/abs/2001.09386)
-    by Gu et al, 2020
 
 ### Common Training Driver
 

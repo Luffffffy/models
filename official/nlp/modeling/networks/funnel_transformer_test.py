@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,11 +38,20 @@ class FunnelTransformerEncoderTest(parameterized.TestCase, tf.test.TestCase):
     tf.keras.mixed_precision.set_global_policy("float32")
 
   @parameterized.named_parameters(
-      ("mix_max", "mixed_float16", tf.float16, "max"),
-      ("float32_max", "float32", tf.float32, "max"),
-      ("mix_avg", "mixed_float16", tf.float16, "avg"),
-      ("float32_avg", "float32", tf.float32, "avg"))
-  def test_network_creation(self, policy, pooled_dtype, pool_type):
+      ("mix_truncated_avg_rezero", "mixed_float16", tf.float16, "truncated_avg",
+       "ReZeroTransformer"), ("float32_truncated_avg_rezero", "float32",
+                              tf.float32, "truncated_avg", "ReZeroTransformer"),
+      ("mix_truncated_avg", "mixed_float16", tf.float16, "truncated_avg",
+       "TransformerEncoderBlock"),
+      ("float32_truncated_avg", "float32", tf.float32, "truncated_avg",
+       "TransformerEncoderBlock"), ("mix_max", "mixed_float16", tf.float16,
+                                    "max", "TransformerEncoderBlock"),
+      ("float32_max", "float32", tf.float32, "max", "TransformerEncoderBlock"),
+      ("mix_avg", "mixed_float16", tf.float16, "avg",
+       "TransformerEncoderBlock"),
+      ("float32_avg", "float32", tf.float32, "avg", "TransformerEncoderBlock"))
+  def test_network_creation(self, policy, pooled_dtype, pool_type,
+                            transformer_cls):
     tf.keras.mixed_precision.set_global_policy(policy)
 
     hidden_size = 32
@@ -57,7 +66,9 @@ class FunnelTransformerEncoderTest(parameterized.TestCase, tf.test.TestCase):
         num_layers=num_layers,
         pool_stride=pool_stride,
         pool_type=pool_type,
-        unpool_length=0)
+        max_sequence_length=sequence_length,
+        unpool_length=0,
+        transformer_cls=transformer_cls)
     # Create the inputs (note that the first dimension is implicit).
     word_ids = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
     mask = tf.keras.Input(shape=(sequence_length,), dtype=tf.int32)
@@ -71,8 +82,14 @@ class FunnelTransformerEncoderTest(parameterized.TestCase, tf.test.TestCase):
     self.assertIsInstance(test_network.pooler_layer, tf.keras.layers.Dense)
 
     # Stride=2 compresses sequence length to half the size at each layer.
-    # This configuration gives each layer of seq length: 21->11->6->3.
-    expected_data_shape = [None, 3, hidden_size]
+    # For pool_type = max or avg,
+    # this configuration gives each layer of seq length: 21->11->6->3.
+    # For pool_type = truncated_avg,
+    # seq length: 21->10->5->2.
+    if pool_type in ["max", "avg"]:
+      expected_data_shape = [None, 3, hidden_size]
+    else:
+      expected_data_shape = [None, 2, hidden_size]
     expected_pooled_shape = [None, hidden_size]
 
     self.assertAllEqual(expected_data_shape, data.shape.as_list())
@@ -244,7 +261,8 @@ class FunnelTransformerEncoderTest(parameterized.TestCase, tf.test.TestCase):
         norm_first=False,
         pool_type="max",
         pool_stride=2,
-        unpool_length=0)
+        unpool_length=0,
+        transformer_cls="TransformerEncoderBlock")
     network = funnel_transformer.FunnelTransformerEncoder(**kwargs)
     expected_config = dict(kwargs)
     expected_config["inner_activation"] = tf.keras.activations.serialize(

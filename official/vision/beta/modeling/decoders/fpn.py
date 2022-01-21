@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 from typing import Any, Mapping, Optional
 
 # Import libraries
-
+from absl import logging
 import tensorflow as tf
 
 from official.modeling import hyperparams
@@ -108,6 +108,7 @@ class FPN(tf.keras.Model):
       bn_axis = 1
 
     # Get input feature pyramid from backbone.
+    logging.info('FPN input_specs: %s', input_specs)
     inputs = self._build_input_pyramid(input_specs, min_level)
     backbone_max_level = min(int(max(inputs.keys())), max_level)
 

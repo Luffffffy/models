@@ -58,12 +58,12 @@ In the near future, we will add:
 
 | Model | Reference (Paper) |
 |-------|-------------------|
-| [ALBERT (A Lite BERT)](nlp/albert) | [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942) |
-| [BERT (Bidirectional Encoder Representations from Transformers)](nlp/bert) | [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) |
-| [NHNet (News Headline generation model)](nlp/nhnet) | [Generating Representative Headlines for News Stories](https://arxiv.org/abs/2001.09386) |
-| [Transformer](nlp/transformer) | [Attention Is All You Need](https://arxiv.org/abs/1706.03762) |
+| [ALBERT (A Lite BERT)](nlp/MODEL_GARDEN.md#available-model-configs) | [ALBERT: A Lite BERT for Self-supervised Learning of Language Representations](https://arxiv.org/abs/1909.11942) |
+| [BERT (Bidirectional Encoder Representations from Transformers)](nlp/MODEL_GARDEN.md#available-model-configs) | [BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding](https://arxiv.org/abs/1810.04805) |
+| [NHNet (News Headline generation model)](projects/nhnet) | [Generating Representative Headlines for News Stories](https://arxiv.org/abs/2001.09386) |
+| [Transformer](nlp/MODEL_GARDEN.md#available-model-configs) | [Attention Is All You Need](https://arxiv.org/abs/1706.03762) |
 | [XLNet](nlp/xlnet) | [XLNet: Generalized Autoregressive Pretraining for Language Understanding](https://arxiv.org/abs/1906.08237) |
-| [MobileBERT](nlp/projects/mobilebert) | [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984) |
+| [MobileBERT](projects/mobilebert) | [MobileBERT: a Compact Task-Agnostic BERT for Resource-Limited Devices](https://arxiv.org/abs/2004.02984) |
 
 ### Recommendation
 
@@ -84,7 +84,7 @@ as tagged branches or [downloadable releases](https://github.com/tensorflow/mode
 * Model repository version numbers match the target TensorFlow release,
 such that
 [release v2.5.0](https://github.com/tensorflow/models/releases/tag/v2.5.0)
-are compatible with
+is compatible with
 [TensorFlow v2.5.0](https://github.com/tensorflow/tensorflow/releases/tag/v2.5.0).
 
 Please follow the below steps before running models in this repository.
@@ -121,7 +121,7 @@ If you are using nlp packages, please also install **tensorflow-text**:
 pip install tensorflow-text
 ```
 
-Please check out our [example](colab/fine_tuning_bert.ipynb)
+Please check out our [example](https://github.com/tensorflow/text/blob/master/docs/tutorials/fine_tune_bert.ipynb)
 to learn how to use a PIP package.
 
 Note that **tf-models-official** may not include the latest changes in this

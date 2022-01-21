@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -302,6 +302,7 @@ class SGDTorch(tf.keras.optimizers.Optimizer):
         "decay": self._initial_decay,
         "momentum": self._serialize_hyperparameter("momentum"),
         "momentum_start": self._serialize_hyperparameter("momentum_start"),
+        "weight_decay": self._serialize_hyperparameter("weight_decay"),
         "warmup_steps": self._serialize_hyperparameter("warmup_steps"),
         "nesterov": self.nesterov,
     })

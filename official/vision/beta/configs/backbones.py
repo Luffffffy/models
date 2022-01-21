@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -99,6 +99,13 @@ class RevNet(hyperparams.Config):
 
 
 @dataclasses.dataclass
+class MobileDet(hyperparams.Config):
+  """Mobiledet config."""
+  model_id: str = 'MobileDetCPU'
+  filter_size_scale: float = 1.0
+
+
+@dataclasses.dataclass
 class Backbone(hyperparams.OneOfConfig):
   """Configuration for backbones.
 
@@ -111,6 +118,7 @@ class Backbone(hyperparams.OneOfConfig):
     spinenet: spinenet backbone config.
     spinenet_mobile: mobile spinenet backbone config.
     mobilenet: mobilenet backbone config.
+    mobiledet: mobiledet backbone config.
   """
   type: Optional[str] = None
   resnet: ResNet = ResNet()
@@ -120,3 +128,5 @@ class Backbone(hyperparams.OneOfConfig):
   spinenet: SpineNet = SpineNet()
   spinenet_mobile: SpineNetMobile = SpineNetMobile()
   mobilenet: MobileNet = MobileNet()
+  mobiledet: MobileDet = MobileDet()
+

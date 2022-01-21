@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,18 +63,20 @@ class ClassificationModule(export_base.ExportModule):
     Returns:
       Tensor holding classification output logits.
     """
-    with tf.device('cpu:0'):
-      images = tf.cast(images, dtype=tf.float32)
+    # Skip image preprocessing when input_type is tflite so it is compatible
+    # with TFLite quantization.
+    if self._input_type != 'tflite':
+      with tf.device('cpu:0'):
+        images = tf.cast(images, dtype=tf.float32)
 
-      images = tf.nest.map_structure(
-          tf.identity,
-          tf.map_fn(
-              self._build_inputs, elems=images,
-              fn_output_signature=tf.TensorSpec(
-                  shape=self._input_image_size + [3], dtype=tf.float32),
-              parallel_iterations=32
-              )
-          )
+        images = tf.nest.map_structure(
+            tf.identity,
+            tf.map_fn(
+                self._build_inputs,
+                elems=images,
+                fn_output_signature=tf.TensorSpec(
+                    shape=self._input_image_size + [3], dtype=tf.float32),
+                parallel_iterations=32))
 
     logits = self.inference_step(images)
     probs = tf.nn.softmax(logits)

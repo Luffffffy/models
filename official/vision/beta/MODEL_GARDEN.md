@@ -1,5 +1,10 @@
 # TF-Vision Model Garden
 
+⚠️ Disclaimer: All datasets hyperlinked from this page are not owned or
+distributed by Google. The dataset is made available by third parties.
+Please review the terms and conditions made available by the third parties
+before using the data.
+
 ## Introduction
 
 TF-Vision modeling library for computer vision provides a collection of
@@ -59,11 +64,12 @@ depth, label smoothing and dropout.
   * [RetinaNet](https://arxiv.org/abs/1708.02002) and [RetinaNet-RS](https://arxiv.org/abs/2107.00057)
   * [Mask R-CNN](https://arxiv.org/abs/1703.06870)
   * [Cascade RCNN](https://arxiv.org/abs/1712.00726) and [Cascade RCNN-RS](https://arxiv.org/abs/2107.00057)
-
-* Models are all trained on COCO train2017 and evaluated on COCO val2017.
+* Models are all trained on [COCO](https://cocodataset.org/) train2017 and
+evaluated on [COCO](https://cocodataset.org/) val2017.
 * Training details:
-  * Models finetuned from ImageNet pretrained checkpoints adopt the 12 or 36
-    epochs schedule. Models trained from scratch adopt the 350 epochs schedule.
+  * Models finetuned from [ImageNet](https://www.image-net.org/) pretrained
+    checkpoints adopt the 12 or 36 epochs schedule. Models trained from scratch
+    adopt the 350 epochs schedule.
   * The default training data augmentation implements horizontal flipping and
     scale jittering with a random scale between [0.5, 2.0].
   * Unless noted, all models are trained with l2 weight regularization and ReLU
@@ -106,18 +112,18 @@ depth, label smoothing and dropout.
 
 | Backbone     | Resolution    | Epochs  | FLOPs (B)  | Params (M) | Box AP | Mask AP | Download |
 | ------------ |:-------------:| -------:|-----------:|-----------:|-------:|--------:|---------:|
-ResNet50-FPN | 640x640    | 350    | 227.7     | 46.3       | 42.3   | 37.6    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/r50fpn_640_coco_scratch_tpu4x4.yaml) |
+| ResNet50-FPN | 640x640    | 350    | 227.7     | 46.3       | 42.3   | 37.6    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/r50fpn_640_coco_scratch_tpu4x4.yaml) |
 | SpineNet-49  | 640x640       |  350    | 215.7      | 40.8       | 42.6   | 37.9    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet49_mrcnn_tpu.yaml) |
-SpineNet-96  | 1024x1024  | 500    | 315.0     | 55.2       | 48.1   | 42.4    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet96_mrcnn_tpu.yaml) |
-SpineNet-143 | 1280x1280  | 500    | 498.8     | 79.2       | 49.3   | 43.4    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet143_mrcnn_tpu.yaml) |
+| SpineNet-96  | 1024x1024  | 500    | 315.0     | 55.2       | 48.1   | 42.4    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet96_mrcnn_tpu.yaml) |
+| SpineNet-143 | 1280x1280  | 500    | 498.8     | 79.2       | 49.3   | 43.4    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet143_mrcnn_tpu.yaml) |
 
 
 #### Cascade RCNN-RS (Trained from scratch)
 
-backbone     | resolution | epochs | params (M) | box AP | mask AP | download
+| Backbone     | Resolution | Epochs | Params (M) | Box AP | Mask AP | Download
 ------------ | :--------: | -----: | ---------: | -----: | ------: | -------:
-SpineNet-49  | 640x640    | 500    | 56.4       | 46.4   | 40.0    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet49_cascadercnn_tpu.yaml)|
-SpineNet-143 | 1280x1280  | 500    | 94.9       | 51.9   | 45.0    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet143_cascadercnn_tpu.yaml)|
+| SpineNet-49  | 640x640    | 500    | 56.4       | 46.4   | 40.0    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet49_cascadercnn_tpu.yaml)|
+| SpineNet-143 | 1280x1280  | 500    | 94.9       | 51.9   | 45.0    | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/maskrcnn/coco_spinenet143_cascadercnn_tpu.yaml)|
 
 ## Semantic Segmentation
 
@@ -143,9 +149,14 @@ SpineNet-143 | 1280x1280  | 500    | 94.9       | 51.9   | 45.0    | [config](ht
 
 ### Common Settings and Notes
 
-* We provide models for video classification with two backbones:
-  [SlowOnly](https://arxiv.org/abs/1812.03982) and 3D-ResNet (R3D) used in
-  [Spatiotemporal Contrastive Video Representation Learning](https://arxiv.org/abs/2008.03800).
+*   We provide models for video classification with backbones:
+    *   SlowOnly in
+        [SlowFast Networks for Video Recognition](https://arxiv.org/abs/1812.03982).
+    *   ResNet-3D (R3D) in
+        [Spatiotemporal Contrastive Video Representation Learning](https://arxiv.org/abs/2008.03800).
+    *   ResNet-3D-RS (R3D-RS) in
+        [Revisiting 3D ResNets for Video Recognition](https://arxiv.org/pdf/2109.01696.pdf).
+
 * Training and evaluation details:
   * All models are trained from scratch with vision modality (RGB) for 200
     epochs.
@@ -161,6 +172,11 @@ SpineNet-143 | 1280x1280  | 500    | 94.9       | 51.9   | 45.0    | [config](ht
 | SlowOnly | 8 x 8                  |  74.1   |  91.4   | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/video_classification/k400_slowonly8x8_tpu.yaml) |
 | SlowOnly | 16 x 4                 |  75.6   |  92.1   | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/video_classification/k400_slowonly16x4_tpu.yaml) |
 | R3D-50   | 32 x 2                 |  77.0   |  93.0   | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/video_classification/k400_3d-resnet50_tpu.yaml) |
+| R3D-RS-50   | 32 x 2                 |  78.2   |  93.7   | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/video_classification/k400_resnet3drs_50_tpu.yaml) |
+| R3D-RS-101 | 32 x 2                 | 79.5  | 94.2  | -
+| R3D-RS-152 | 32 x 2                 | 79.9  | 94.3  | -
+| R3D-RS-200 | 32 x 2                 | 80.4  | 94.4  | -
+| R3D-RS-200 | 48 x 2                 | 81.0  | -     | -
 
 ### Kinetics-600 Action Recognition Baselines
 
@@ -168,3 +184,5 @@ SpineNet-143 | 1280x1280  | 500    | 94.9       | 51.9   | 45.0    | [config](ht
 | -------- |:----------------------:|--------:|--------:|---------:|
 | SlowOnly | 8 x 8                  |  77.3   |  93.6   | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/video_classification/k600_slowonly8x8_tpu.yaml) |
 | R3D-50   | 32 x 2                 |  79.5   |  94.8   | [config](https://github.com/tensorflow/models/blob/master/official/vision/beta/configs/experiments/video_classification/k600_3d-resnet50_tpu.yaml) |
+| R3D-RS-200 | 32 x 2                 | 83.1  | -     | -
+| R3D-RS-200 | 48 x 2                 | 83.8  | -     | -

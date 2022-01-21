@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,9 +55,13 @@ class Parser(hyperparams.Config):
   aug_rand_hflip: bool = False
   aug_scale_min: float = 1.0
   aug_scale_max: float = 1.0
-  aug_policy: Optional[str] = None
   skip_crowd_during_training: bool = True
   max_num_instances: int = 100
+  # Can choose AutoAugment and RandAugment.
+  aug_type: Optional[common.Augmentation] = None
+
+  # Keep for backward compatibility. Not used.
+  aug_policy: Optional[str] = None
 
 
 @dataclasses.dataclass
@@ -83,6 +87,7 @@ class Anchor(hyperparams.Config):
 
 @dataclasses.dataclass
 class Losses(hyperparams.Config):
+  loss_weight: float = 1.0
   focal_loss_alpha: float = 0.25
   focal_loss_gamma: float = 1.5
   huber_loss_delta: float = 0.1
@@ -114,6 +119,7 @@ class DetectionGenerator(hyperparams.Config):
   max_num_detections: int = 100
   nms_version: str = 'v2'  # `v2`, `v1`, `batched`.
   use_cpu_nms: bool = False
+  soft_nms_sigma: Optional[float] = None  # Only works when nms_version='v1'.
 
 
 @dataclasses.dataclass

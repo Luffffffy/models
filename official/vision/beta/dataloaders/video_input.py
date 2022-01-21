@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -361,7 +361,7 @@ class Parser(parser.Parser):
       audio = decoded_tensors[self._audio_feature]
       audio = tf.cast(audio, dtype=self._dtype)
       audio = preprocess_ops_3d.sample_sequence(
-          audio, 20, random=False, stride=1)
+          audio, self._audio_shape[0], random=False, stride=1)
       audio = tf.ensure_shape(audio, self._audio_shape)
       features['audio'] = audio
 

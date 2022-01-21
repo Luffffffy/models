@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -133,6 +133,7 @@ class DetectionGenerator(hyperparams.Config):
   max_num_detections: int = 100
   nms_version: str = 'v2'  # `v2`, `v1`, `batched`
   use_cpu_nms: bool = False
+  soft_nms_sigma: Optional[float] = None  # Only works when nms_version='v1'.
 
 
 @dataclasses.dataclass
@@ -184,6 +185,7 @@ class MaskRCNN(hyperparams.Config):
 
 @dataclasses.dataclass
 class Losses(hyperparams.Config):
+  loss_weight: float = 1.0
   rpn_huber_loss_delta: float = 1. / 9.
   frcnn_huber_loss_delta: float = 1.
   l2_weight_decay: float = 0.0

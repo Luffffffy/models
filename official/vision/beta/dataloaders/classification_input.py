@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -252,4 +252,22 @@ class Parser(parser.Parser):
     # Convert image to self._dtype.
     image = tf.image.convert_image_dtype(image, self._dtype)
 
+    return image
+
+  @classmethod
+  def inference_fn(cls,
+                   image: tf.Tensor,
+                   input_image_size: List[int],
+                   num_channels: int = 3) -> tf.Tensor:
+    """Builds image model inputs for serving."""
+
+    image = tf.cast(image, dtype=tf.float32)
+    image = preprocess_ops.center_crop_image(image)
+    image = tf.image.resize(
+        image, input_image_size, method=tf.image.ResizeMethod.BILINEAR)
+
+    # Normalizes image with mean and std pixel values.
+    image = preprocess_ops.normalize_image(
+        image, offset=MEAN_RGB, scale=STDDEV_RGB)
+    image.set_shape(input_image_size + [num_channels])
     return image

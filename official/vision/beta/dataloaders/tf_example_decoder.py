@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,8 +23,9 @@ from official.vision.beta.dataloaders import decoder
 
 
 def _generate_source_id(image_bytes):
+  # Hashing using 22 bits since float32 has only 23 mantissa bits.
   return tf.strings.as_string(
-      tf.strings.to_hash_bucket_fast(image_bytes, 2 ** 63 - 1))
+      tf.strings.to_hash_bucket_fast(image_bytes, 2 ** 22 - 1))
 
 
 class TfExampleDecoder(decoder.Decoder):

@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -50,13 +50,14 @@ class SegmentationNetworkTest(parameterized.TestCase, tf.test.TestCase):
     model = segmentation_model.SegmentationModel(
         backbone=backbone,
         decoder=decoder,
-        head=head
+        head=head,
+        mask_scoring_head=None,
     )
 
-    logits = model(inputs)
+    outputs = model(inputs)
     self.assertAllEqual(
         [2, input_size // (2**level), input_size // (2**level), num_classes],
-        logits.numpy().shape)
+        outputs['logits'].numpy().shape)
 
   def test_serialize_deserialize(self):
     """Validate the network can be serialized and deserialized."""

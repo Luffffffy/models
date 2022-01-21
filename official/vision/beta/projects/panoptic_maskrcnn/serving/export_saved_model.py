@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,8 +47,8 @@ from official.vision.beta.serving import export_saved_model_lib
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('experiment', 'panoptic_maskrcnn_resnetfpn_coco',
-                    'experiment type, e.g. panoptic_maskrcnn_resnetfpn_coco')
+flags.DEFINE_string('experiment', 'panoptic_fpn_coco',
+                    'experiment type, e.g. panoptic_fpn_coco')
 flags.DEFINE_string('export_dir', None, 'The export directory.')
 flags.DEFINE_string('checkpoint_path', None, 'Checkpoint path.')
 flags.DEFINE_multi_string(

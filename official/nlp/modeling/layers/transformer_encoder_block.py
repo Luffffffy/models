@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 """Keras-based TransformerEncoder block layer."""
 
 import tensorflow as tf
+
+from official.nlp.modeling.layers import util
 
 
 @tf.keras.utils.register_keras_serializable(package="Text")
@@ -86,8 +88,9 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         kernel.
       attention_axes: axes over which the attention is applied. `None` means
         attention over all axes, but batch, heads, and features.
-      **kwargs: keyword arguments/
+      **kwargs: keyword arguments.
     """
+    util.filter_kwargs(kwargs)
     super().__init__(**kwargs)
 
     self._num_heads = num_attention_heads

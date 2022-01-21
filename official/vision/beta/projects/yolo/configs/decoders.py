@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,8 @@ class YoloDecoder(hyperparams.Config):
   use_separable_conv: bool = False
   csp_stack: Optional[bool] = None
   fpn_depth: Optional[int] = None
+  max_fpn_depth: Optional[int] = None
+  max_csp_stack: Optional[int] = None
   fpn_filter_scale: Optional[int] = None
   path_process_len: Optional[int] = None
   max_level_process_len: Optional[int] = None

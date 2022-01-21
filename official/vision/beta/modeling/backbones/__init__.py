@@ -1,4 +1,4 @@
-# Copyright 2021 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 """Backbones package definition."""
 
 from official.vision.beta.modeling.backbones.efficientnet import EfficientNet
+from official.vision.beta.modeling.backbones.mobiledet import MobileDet
 from official.vision.beta.modeling.backbones.mobilenet import MobileNet
 from official.vision.beta.modeling.backbones.resnet import ResNet
 from official.vision.beta.modeling.backbones.resnet_3d import ResNet3D

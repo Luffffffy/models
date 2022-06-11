@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Semantic segmentation configuration definition."""
 
 import dataclasses
@@ -23,7 +22,7 @@ from official.modeling import hyperparams
 from official.modeling import optimization
 from official.projects.volumetric_models.configs import backbones
 from official.projects.volumetric_models.configs import decoders
-from official.vision.beta.configs import common
+from official.vision.configs import common
 
 
 @dataclasses.dataclass

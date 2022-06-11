@@ -34,6 +34,8 @@ from official.nlp.modeling.layers.mobile_bert_layers import MobileBertMaskedLM
 from official.nlp.modeling.layers.mobile_bert_layers import MobileBertTransformer
 from official.nlp.modeling.layers.multi_channel_attention import *
 from official.nlp.modeling.layers.on_device_embedding import OnDeviceEmbedding
+from official.nlp.modeling.layers.pack_optimization import PackBertEmbeddings
+from official.nlp.modeling.layers.pack_optimization import StridedTransformerEncoderBlock
 from official.nlp.modeling.layers.position_embedding import PositionEmbedding
 from official.nlp.modeling.layers.position_embedding import RelativePositionBias
 from official.nlp.modeling.layers.position_embedding import RelativePositionEmbedding
@@ -42,6 +44,7 @@ from official.nlp.modeling.layers.relative_attention import TwoStreamRelativeAtt
 from official.nlp.modeling.layers.reuse_attention import ReuseMultiHeadAttention
 from official.nlp.modeling.layers.reuse_transformer import ReuseTransformer
 from official.nlp.modeling.layers.rezero_transformer import ReZeroTransformer
+from official.nlp.modeling.layers.routing import *
 from official.nlp.modeling.layers.self_attention_mask import SelfAttentionMask
 from official.nlp.modeling.layers.spectral_normalization import *
 from official.nlp.modeling.layers.talking_heads_attention import TalkingHeadsAttention

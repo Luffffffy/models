@@ -17,6 +17,8 @@ import math
 
 import tensorflow as tf
 
+from official.modeling import tf_utils
+
 
 class Attention(tf.keras.layers.Layer):
   """Multi-headed attention layer."""
@@ -50,27 +52,27 @@ class Attention(tf.keras.layers.Layer):
 
     attention_initializer = _glorot_initializer(input_shape.as_list()[-1],
                                                 self.hidden_size)
-    self.query_dense_layer = tf.keras.layers.experimental.EinsumDense(
+    self.query_dense_layer = tf.keras.layers.EinsumDense(
         "BTE,ENH->BTNH",
         output_shape=(None, self.num_heads, size_per_head),
-        kernel_initializer=attention_initializer,
+        kernel_initializer=tf_utils.clone_initializer(attention_initializer),
         bias_axes=None,
         name="query")
-    self.key_dense_layer = tf.keras.layers.experimental.EinsumDense(
+    self.key_dense_layer = tf.keras.layers.EinsumDense(
         "BTE,ENH->BTNH",
         output_shape=(None, self.num_heads, size_per_head),
-        kernel_initializer=attention_initializer,
+        kernel_initializer=tf_utils.clone_initializer(attention_initializer),
         bias_axes=None,
         name="key")
-    self.value_dense_layer = tf.keras.layers.experimental.EinsumDense(
+    self.value_dense_layer = tf.keras.layers.EinsumDense(
         "BTE,ENH->BTNH",
         output_shape=(None, self.num_heads, size_per_head),
-        kernel_initializer=attention_initializer,
+        kernel_initializer=tf_utils.clone_initializer(attention_initializer),
         bias_axes=None,
         name="value")
 
     output_initializer = _glorot_initializer(self.hidden_size, self.hidden_size)
-    self.output_dense_layer = tf.keras.layers.experimental.EinsumDense(
+    self.output_dense_layer = tf.keras.layers.EinsumDense(
         "BTNH,NHE->BTE",
         output_shape=(None, self.hidden_size),
         kernel_initializer=output_initializer,

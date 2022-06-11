@@ -12,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 from absl.testing import parameterized
 import tensorflow as tf
 from official.core import config_definitions as cfg
 from official.core import exp_factory
 from official.projects.assemblenet.configs import assemblenet
-from official.vision.beta.configs import video_classification as exp_cfg
+from official.vision.configs import video_classification as exp_cfg
 
 
 class AssemblenetTest(tf.test.TestCase, parameterized.TestCase):

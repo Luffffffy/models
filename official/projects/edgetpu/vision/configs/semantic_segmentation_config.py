@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Semantic segmentation configuration definition.
 
 The segmentation model is built using the mobilenet edgetpu v2 backbone and
@@ -25,10 +24,10 @@ from official.core import config_definitions as cfg
 from official.core import exp_factory
 from official.modeling import hyperparams
 from official.modeling import optimization
-from official.vision.beta.configs import backbones
-from official.vision.beta.configs import common
-from official.vision.beta.configs import decoders
-from official.vision.beta.configs import semantic_segmentation as base_cfg
+from official.vision.configs import backbones
+from official.vision.configs import common
+from official.vision.configs import decoders
+from official.vision.configs import semantic_segmentation as base_cfg
 
 
 @dataclasses.dataclass

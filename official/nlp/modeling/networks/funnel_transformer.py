@@ -20,6 +20,7 @@ from absl import logging
 import numpy as np
 import tensorflow as tf
 
+from official.modeling import tf_utils
 from official.nlp.modeling import layers
 
 _Initializer = Union[str, tf.keras.initializers.Initializer]
@@ -226,6 +227,7 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
       funnel encoder relies on.
     share_rezero: bool. Whether to share ReZero alpha between the attention
       layer and the ffn layer. This option is specific to ReZero.
+    with_dense_inputs: Whether to accept dense embeddings as the input.
   """
 
   def __init__(
@@ -264,20 +266,20 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
       self._embedding_layer = layers.OnDeviceEmbedding(
           vocab_size=vocab_size,
           embedding_width=embedding_width,
-          initializer=initializer,
+          initializer=tf_utils.clone_initializer(initializer),
           name='word_embeddings')
     else:
       self._embedding_layer = embedding_layer
 
     self._position_embedding_layer = layers.PositionEmbedding(
-        initializer=initializer,
+        initializer=tf_utils.clone_initializer(initializer),
         max_length=max_sequence_length,
         name='position_embedding')
 
     self._type_embedding_layer = layers.OnDeviceEmbedding(
         vocab_size=type_vocab_size,
         embedding_width=embedding_width,
-        initializer=initializer,
+        initializer=tf_utils.clone_initializer(initializer),
         use_one_hot=True,
         name='type_embeddings')
 
@@ -291,11 +293,11 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
     # 'hidden_size'.
     self._embedding_projection = None
     if embedding_width != hidden_size:
-      self._embedding_projection = tf.keras.layers.experimental.EinsumDense(
+      self._embedding_projection = tf.keras.layers.EinsumDense(
           '...x,xy->...y',
           output_shape=hidden_size,
           bias_axes='y',
-          kernel_initializer=initializer,
+          kernel_initializer=tf_utils.clone_initializer(initializer),
           name='embedding_projection')
 
     self._transformer_layers = []
@@ -315,7 +317,7 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
           attention_dropout=attention_dropout,
           norm_first=norm_first,
           output_range=output_range if i == num_layers - 1 else None,
-          kernel_initializer=initializer,
+          kernel_initializer=tf_utils.clone_initializer(initializer),
           share_rezero=share_rezero,
           name='transformer/layer_%d' % i)
       self._transformer_layers.append(layer)
@@ -323,7 +325,7 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
     self._pooler_layer = tf.keras.layers.Dense(
         units=hidden_size,
         activation='tanh',
-        kernel_initializer=initializer,
+        kernel_initializer=tf_utils.clone_initializer(initializer),
         name='pooler_transform')
     if isinstance(pool_stride, int):
       # TODO(b/197133196): Pooling layer can be shared.
@@ -341,9 +343,6 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
       # TODO(b/203665205): unpool_length should be implemented.
       if unpool_length != 0:
         raise ValueError('unpool_length is not supported by truncated_avg now.')
-      # Compute the attention masks and pooling transforms.
-      self._pooling_transforms = _create_truncated_avg_transforms(
-          max_sequence_length, pool_strides)
     else:
       raise ValueError('pool_type not supported.')
 
@@ -357,6 +356,7 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
             name='att_input_pool_layer')
         self._att_input_pool_layers.append(att_input_pool_layer)
 
+    self._max_sequence_length = max_sequence_length
     self._pool_strides = pool_strides  # This is a list here.
     self._unpool_length = unpool_length
     self._pool_type = pool_type
@@ -402,12 +402,22 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
             _transformer_cls2str.get(transformer_cls, str(transformer_cls))
     }
 
+    self.inputs = dict(
+        input_word_ids=tf.keras.Input(shape=(None,), dtype=tf.int32),
+        input_mask=tf.keras.Input(shape=(None,), dtype=tf.int32),
+        input_type_ids=tf.keras.Input(shape=(None,), dtype=tf.int32))
+
   def call(self, inputs):
     # inputs are [word_ids, mask, type_ids]
     if isinstance(inputs, (list, tuple)):
       logging.warning('List inputs to  %s are discouraged.', self.__class__)
       if len(inputs) == 3:
         word_ids, mask, type_ids = inputs
+        dense_inputs = None
+        dense_mask = None
+        dense_type_ids = None
+      elif len(inputs) == 6:
+        word_ids, mask, type_ids, dense_inputs, dense_mask, dense_type_ids = inputs
       else:
         raise ValueError('Unexpected inputs to %s with length at %d.' %
                          (self.__class__, len(inputs)))
@@ -415,10 +425,21 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
       word_ids = inputs.get('input_word_ids')
       mask = inputs.get('input_mask')
       type_ids = inputs.get('input_type_ids')
+
+      dense_inputs = inputs.get('dense_inputs', None)
+      dense_mask = inputs.get('dense_mask', None)
+      dense_type_ids = inputs.get('dense_type_ids', None)
     else:
       raise ValueError('Unexpected inputs type to %s.' % self.__class__)
 
     word_embeddings = self._embedding_layer(word_ids)
+
+    if dense_inputs is not None:
+      # Concat the dense embeddings at sequence begin so unpool_len can control
+      # embedding not being pooled.
+      word_embeddings = tf.concat([dense_inputs, word_embeddings], axis=1)
+      type_ids = tf.concat([dense_type_ids, type_ids], axis=1)
+      mask = tf.concat([dense_mask, mask], axis=1)
     # absolute position embeddings
     position_embeddings = self._position_embedding_layer(word_embeddings)
     type_embeddings = self._type_embedding_layer(type_ids)
@@ -466,8 +487,13 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
               axes=[1, 2])
         encoder_outputs.append(x)
     elif self._pool_type == _TRUNCATED_AVG:
+      # Compute the attention masks and pooling transforms.
+      # Note we do not compute this in __init__ due to inference converter issue
+      # b/215659399.
+      pooling_transforms = _create_truncated_avg_transforms(
+          self._max_sequence_length, self._pool_strides)
       attention_masks = _create_truncated_avg_masks(mask, self._pool_strides,
-                                                    self._pooling_transforms)
+                                                    pooling_transforms)
       for i, layer in enumerate(self._transformer_layers):
         attention_mask = attention_masks[i]
         # Bypass no pooling cases.
@@ -478,7 +504,7 @@ class FunnelTransformerEncoder(tf.keras.layers.Layer):
               'BFD,FT->BTD',
               tf.cast(x[:, self._unpool_length:, :], _get_policy_dtype()
                      ),  # extra casting for faster mixed computation.
-              self._pooling_transforms[i])
+              pooling_transforms[i])
           query_inputs = tf.concat(
               values=(tf.cast(
                   x[:, :self._unpool_length, :],

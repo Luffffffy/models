@@ -13,13 +13,13 @@
 # limitations under the License.
 
 """Feature Pyramid Network and Path Aggregation variants used in YOLO."""
-from typing import Mapping, Union, Optional
+from typing import Mapping, Optional, Union
 
 import tensorflow as tf
 
 from official.modeling import hyperparams
-from official.vision.beta.modeling.decoders import factory
 from official.vision.beta.projects.yolo.modeling.layers import nn_blocks
+from official.vision.modeling.decoders import factory
 
 # model configurations
 # the structure is as follows. model version, {v3, v4, v#, ... etc}
@@ -613,7 +613,7 @@ def build_yolo_decoder(
                      '{yolo_model.YOLO_MODELS[decoder_cfg.version].keys()}'
                      'or specify a custom decoder config using YoloDecoder.')
 
-  base_model = YOLO_MODELS[decoder_cfg.version][decoder_cfg.type]
+  base_model = YOLO_MODELS[decoder_cfg.version][decoder_cfg.type].copy()
 
   cfg_dict = decoder_cfg.as_dict()
   for key in base_model:

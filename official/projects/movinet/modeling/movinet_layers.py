@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Lint as: python3
 """Contains common building blocks for MoViNets.
 
 Reference: https://arxiv.org/pdf/2103.11511.pdf
@@ -23,7 +22,7 @@ from typing import Any, Mapping, Optional, Sequence, Tuple, Union
 import tensorflow as tf
 
 from official.modeling import tf_utils
-from official.vision.beta.modeling.layers import nn_layers
+from official.vision.modeling.layers import nn_layers
 
 # Default kernel weight decay that may be overridden
 KERNEL_WEIGHT_DECAY = 1.5e-5
@@ -93,10 +92,9 @@ class MobileConv2D(tf.keras.layers.Layer):
       data_format: Optional[str] = None,
       dilation_rate: Union[int, Sequence[int]] = (1, 1),
       groups: int = 1,
-      activation: Optional[nn_layers.Activation] = None,
       use_bias: bool = True,
-      kernel_initializer: tf.keras.initializers.Initializer = 'glorot_uniform',
-      bias_initializer: tf.keras.initializers.Initializer = 'zeros',
+      kernel_initializer: str = 'glorot_uniform',
+      bias_initializer: str = 'zeros',
       kernel_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
       bias_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
       activity_regularizer: Optional[tf.keras.regularizers.Regularizer] = None,
@@ -105,6 +103,8 @@ class MobileConv2D(tf.keras.layers.Layer):
       use_depthwise: bool = False,
       use_temporal: bool = False,
       use_buffered_input: bool = False,  # pytype: disable=annotation-type-mismatch  # typed-keras
+      batch_norm_op: Optional[Any] = None,
+      activation_op: Optional[Any] = None,
       **kwargs):  # pylint: disable=g-doc-args
     """Initializes mobile conv2d.
 
@@ -117,6 +117,10 @@ class MobileConv2D(tf.keras.layers.Layer):
       use_buffered_input: if True, the input is expected to be padded
           beforehand. In effect, calling this layer will use 'valid' padding on
           the temporal dimension to simulate 'causal' padding.
+      batch_norm_op: A callable object of batch norm layer. If None, no batch
+        norm will be applied after the convolution.
+      activation_op: A callabel object of activation layer. If None, no
+        activation will be applied after the convolution.
       **kwargs: keyword arguments to be passed to this layer.
 
     Returns:
@@ -130,7 +134,6 @@ class MobileConv2D(tf.keras.layers.Layer):
     self._data_format = data_format
     self._dilation_rate = dilation_rate
     self._groups = groups
-    self._activation = activation
     self._use_bias = use_bias
     self._kernel_initializer = kernel_initializer
     self._bias_initializer = bias_initializer
@@ -142,6 +145,8 @@ class MobileConv2D(tf.keras.layers.Layer):
     self._use_depthwise = use_depthwise
     self._use_temporal = use_temporal
     self._use_buffered_input = use_buffered_input
+    self._batch_norm_op = batch_norm_op
+    self._activation_op = activation_op
 
     kernel_size = normalize_tuple(kernel_size, 2, 'kernel_size')
 
@@ -156,7 +161,6 @@ class MobileConv2D(tf.keras.layers.Layer):
           depth_multiplier=1,
           data_format=data_format,
           dilation_rate=dilation_rate,
-          activation=activation,
           use_bias=use_bias,
           depthwise_initializer=kernel_initializer,
           bias_initializer=bias_initializer,
@@ -175,7 +179,6 @@ class MobileConv2D(tf.keras.layers.Layer):
           data_format=data_format,
           dilation_rate=dilation_rate,
           groups=groups,
-          activation=activation,
           use_bias=use_bias,
           kernel_initializer=kernel_initializer,
           bias_initializer=bias_initializer,
@@ -196,7 +199,6 @@ class MobileConv2D(tf.keras.layers.Layer):
         'data_format': self._data_format,
         'dilation_rate': self._dilation_rate,
         'groups': self._groups,
-        'activation': self._activation,
         'use_bias': self._use_bias,
         'kernel_initializer': self._kernel_initializer,
         'bias_initializer': self._bias_initializer,
@@ -229,6 +231,10 @@ class MobileConv2D(tf.keras.layers.Layer):
     x = tf.reshape(inputs, input_shape)
 
     x = self._conv(x)
+    if self._batch_norm_op is not None:
+      x = self._batch_norm_op(x)
+    if self._activation_op is not None:
+      x = self._activation_op(x)
 
     if self._use_temporal:
       output_shape = [
@@ -357,8 +363,20 @@ class ConvBlock(tf.keras.layers.Layer):
     padding = 'causal' if self._causal else 'same'
     self._groups = input_shape[-1] if self._depthwise else 1
 
-    self._conv_temporal = None
+    self._batch_norm = None
+    self._batch_norm_temporal = None
+    if self._use_batch_norm:
+      self._batch_norm = self._batch_norm_layer(
+          momentum=self._batch_norm_momentum,
+          epsilon=self._batch_norm_epsilon,
+          name='bn')
+      if self._conv_type != '3d' and self._kernel_size[0] > 1:
+        self._batch_norm_temporal = self._batch_norm_layer(
+            momentum=self._batch_norm_momentum,
+            epsilon=self._batch_norm_epsilon,
+            name='bn_temporal')
 
+    self._conv_temporal = None
     if self._conv_type == '3d_2plus1d' and self._kernel_size[0] > 1:
       self._conv = nn_layers.Conv3D(
           self._filters,
@@ -394,6 +412,8 @@ class ConvBlock(tf.keras.layers.Layer):
           kernel_initializer=self._kernel_initializer,
           kernel_regularizer=self._kernel_regularizer,
           use_buffered_input=False,
+          batch_norm_op=self._batch_norm,
+          activation_op=self._activation_layer,
           name='conv2d')
       if self._kernel_size[0] > 1:
         self._conv_temporal = MobileConv2D(
@@ -408,6 +428,8 @@ class ConvBlock(tf.keras.layers.Layer):
             kernel_initializer=self._kernel_initializer,
             kernel_regularizer=self._kernel_regularizer,
             use_buffered_input=self._use_buffered_input,
+            batch_norm_op=self._batch_norm_temporal,
+            activation_op=self._activation_layer,
             name='conv2d_temporal')
     else:
       self._conv = nn_layers.Conv3D(
@@ -422,37 +444,26 @@ class ConvBlock(tf.keras.layers.Layer):
           use_buffered_input=self._use_buffered_input,
           name='conv3d')
 
-    self._batch_norm = None
-    self._batch_norm_temporal = None
-
-    if self._use_batch_norm:
-      self._batch_norm = self._batch_norm_layer(
-          momentum=self._batch_norm_momentum,
-          epsilon=self._batch_norm_epsilon,
-          name='bn')
-      if self._conv_type != '3d' and self._conv_temporal is not None:
-        self._batch_norm_temporal = self._batch_norm_layer(
-            momentum=self._batch_norm_momentum,
-            epsilon=self._batch_norm_epsilon,
-            name='bn_temporal')
-
     super(ConvBlock, self).build(input_shape)
 
   def call(self, inputs):
     """Calls the layer with the given inputs."""
     x = inputs
 
+    # bn_op and activation_op are folded into the '2plus1d' conv layer so that
+    # we do not explicitly call them here.
+    # TODO(lzyuan): clean the conv layers api once the models are re-trained.
     x = self._conv(x)
-    if self._batch_norm is not None:
+    if self._batch_norm is not None and self._conv_type != '2plus1d':
       x = self._batch_norm(x)
-    if self._activation_layer is not None:
+    if self._activation_layer is not None and self._conv_type != '2plus1d':
       x = self._activation_layer(x)
 
     if self._conv_temporal is not None:
       x = self._conv_temporal(x)
-      if self._batch_norm_temporal is not None:
+      if self._batch_norm_temporal is not None and self._conv_type != '2plus1d':
         x = self._batch_norm_temporal(x)
-      if self._activation_layer is not None:
+      if self._activation_layer is not None and self._conv_type != '2plus1d':
         x = self._activation_layer(x)
 
     return x
@@ -640,10 +651,13 @@ class StreamConvBlock(ConvBlock):
     if self._conv_temporal is None and self._stream_buffer is not None:
       x, states = self._stream_buffer(x, states=states)
 
+    # bn_op and activation_op are folded into the '2plus1d' conv layer so that
+    # we do not explicitly call them here.
+    # TODO(lzyuan): clean the conv layers api once the models are re-trained.
     x = self._conv(x)
-    if self._batch_norm is not None:
+    if self._batch_norm is not None and self._conv_type != '2plus1d':
       x = self._batch_norm(x)
-    if self._activation_layer is not None:
+    if self._activation_layer is not None and self._conv_type != '2plus1d':
       x = self._activation_layer(x)
 
     if self._conv_temporal is not None:
@@ -653,9 +667,9 @@ class StreamConvBlock(ConvBlock):
         x, states = self._stream_buffer(x, states=states)
 
       x = self._conv_temporal(x)
-      if self._batch_norm_temporal is not None:
+      if self._batch_norm_temporal is not None and self._conv_type != '2plus1d':
         x = self._batch_norm_temporal(x)
-      if self._activation_layer is not None:
+      if self._activation_layer is not None and self._conv_type != '2plus1d':
         x = self._activation_layer(x)
 
     return x, states
@@ -788,12 +802,14 @@ class StreamSqueezeExcitation(tf.keras.layers.Layer):
     states = dict(states) if states is not None else {}
 
     if self._se_type == '3d':
-      x, states = self._spatiotemporal_pool(inputs, states=states)
+      x, states = self._spatiotemporal_pool(
+          inputs, states=states, output_states=True)
     elif self._se_type == '2d':
       x = self._spatial_pool(inputs)
     elif self._se_type == '2plus3d':
       x_space = self._spatial_pool(inputs)
-      x, states = self._spatiotemporal_pool(x_space, states=states)
+      x, states = self._spatiotemporal_pool(
+          x_space, states=states, output_states=True)
 
       if not self._causal:
         x = tf.tile(x, [1, tf.shape(inputs)[1], 1, 1, 1])
@@ -885,7 +901,8 @@ class MobileBottleneck(tf.keras.layers.Layer):
 
     x = self._expansion_layer(inputs)
     x, states = self._feature_layer(x, states=states)
-    x, states = self._attention_layer(x, states=states)
+    if self._attention_layer is not None:
+      x, states = self._attention_layer(x, states=states)
     x = self._projection_layer(x)
 
     # Add identity so that the ops are ordered as written. This is useful for,
@@ -1136,18 +1153,20 @@ class MovinetBlock(tf.keras.layers.Layer):
         batch_norm_momentum=self._batch_norm_momentum,
         batch_norm_epsilon=self._batch_norm_epsilon,
         name='projection')
-    self._attention = StreamSqueezeExcitation(
-        se_hidden_filters,
-        se_type=se_type,
-        activation=activation,
-        gating_activation=gating_activation,
-        causal=self._causal,
-        conv_type=conv_type,
-        use_positional_encoding=use_positional_encoding,
-        kernel_initializer=kernel_initializer,
-        kernel_regularizer=kernel_regularizer,
-        state_prefix=state_prefix,
-        name='se')
+    self._attention = None
+    if se_type != 'none':
+      self._attention = StreamSqueezeExcitation(
+          se_hidden_filters,
+          se_type=se_type,
+          activation=activation,
+          gating_activation=gating_activation,
+          causal=self._causal,
+          conv_type=conv_type,
+          use_positional_encoding=use_positional_encoding,
+          kernel_initializer=kernel_initializer,
+          kernel_regularizer=kernel_regularizer,
+          state_prefix=state_prefix,
+          name='se')
 
   def get_config(self):
     """Returns a dictionary containing the config used for initialization."""
@@ -1345,6 +1364,7 @@ class Head(tf.keras.layers.Layer):
       tf.keras.layers.BatchNormalization,
       batch_norm_momentum: float = 0.99,
       batch_norm_epsilon: float = 1e-3,
+      average_pooling_type: str = '3d',
       state_prefix: Optional[str] = None,  # pytype: disable=annotation-type-mismatch  # typed-keras
       **kwargs):
     """Implementation for video model head.
@@ -1361,6 +1381,8 @@ class Head(tf.keras.layers.Layer):
       batch_norm_layer: class to use for batch norm.
       batch_norm_momentum: momentum of the batch norm operation.
       batch_norm_epsilon: epsilon of the batch norm operation.
+      average_pooling_type: The average pooling type. Currently supporting
+        ['3d', '2d', 'none'].
       state_prefix: a prefix string to identify states.
       **kwargs: keyword arguments to be passed to this layer.
     """
@@ -1387,8 +1409,16 @@ class Head(tf.keras.layers.Layer):
         batch_norm_momentum=self._batch_norm_momentum,
         batch_norm_epsilon=self._batch_norm_epsilon,
         name='project')
-    self._pool = nn_layers.GlobalAveragePool3D(
-        keepdims=True, causal=False, state_prefix=state_prefix)
+    if average_pooling_type.lower() == '3d':
+      self._pool = nn_layers.GlobalAveragePool3D(
+          keepdims=True, causal=False, state_prefix=state_prefix)
+    elif average_pooling_type.lower() == '2d':
+      self._pool = nn_layers.SpatialAveragePool3D(keepdims=True)
+    elif average_pooling_type == 'none':
+      self._pool = None
+    else:
+      raise ValueError(
+          '%s average_pooling_type is not supported.' % average_pooling_type)
 
   def get_config(self):
     """Returns a dictionary containing the config used for initialization."""
@@ -1422,7 +1452,11 @@ class Head(tf.keras.layers.Layer):
     """
     states = dict(states) if states is not None else {}
     x = self._project(inputs)
-    return self._pool(x, states=states)
+    if self._pool is not None:
+      outputs = self._pool(x, states=states, output_states=True)
+    else:
+      outputs = x
+    return outputs
 
 
 @tf.keras.utils.register_keras_serializable(package='Vision')

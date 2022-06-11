@@ -18,13 +18,13 @@ import math
 
 import tensorflow as tf
 
-EinsumDense = tf.keras.layers.experimental.EinsumDense
+EinsumDense = tf.keras.layers.EinsumDense
 MultiHeadAttention = tf.keras.layers.MultiHeadAttention
 
 
 @tf.keras.utils.register_keras_serializable(package="Text")
 class CachedAttention(tf.keras.layers.MultiHeadAttention):
-  """Attention layer with cache used for auto-agressive decoding.
+  """Attention layer with cache used for autoregressive decoding.
 
   Arguments are the same as `tf.keras.layers.MultiHeadAttention` layer.
   """

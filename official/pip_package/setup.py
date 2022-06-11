@@ -20,8 +20,8 @@ import sys
 from setuptools import find_packages
 from setuptools import setup
 
-version = '2.7.0'
-tf_version = '2.7.0'  # Major version.
+version = '2.9.0'
+tf_version = '2.9.0'  # Major version.
 
 project_name = 'tf-models-official'
 
@@ -74,7 +74,7 @@ setup(
     description='TensorFlow Official Models',
     long_description=long_description,
     author='Google Inc.',
-    author_email='no-reply@google.com',
+    author_email='packages@tensorflow.org',
     url='https://github.com/tensorflow/models',
     license='Apache 2.0',
     packages=find_packages(exclude=[

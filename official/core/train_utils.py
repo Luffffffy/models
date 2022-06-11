@@ -15,6 +15,7 @@
 """Training utils."""
 import copy
 import dataclasses
+import inspect
 import json
 import os
 import pprint
@@ -208,6 +209,28 @@ class BestCheckpointExporter:
     return tf.train.latest_checkpoint(self._export_dir)
 
 
+def create_optimizer(task: base_task.Task,
+                     params: config_definitions.ExperimentConfig
+                     ) -> tf.keras.optimizers.Optimizer:
+  """A create optimizer util to be backward compatability with new args."""
+  if 'dp_config' in inspect.signature(task.create_optimizer).parameters:
+    dp_config = None
+    if hasattr(params.task, 'differential_privacy_config'):
+      dp_config = params.task.differential_privacy_config
+    optimizer = task.create_optimizer(
+        params.trainer.optimizer_config, params.runtime,
+        dp_config=dp_config)
+  else:
+    if hasattr(params.task, 'differential_privacy_config'
+              ) and params.task.differential_privacy_config is not None:
+      raise ValueError('Differential privacy config is specified but '
+                       'task.create_optimizer api does not accept it.')
+    optimizer = task.create_optimizer(
+        params.trainer.optimizer_config,
+        params.runtime)
+  return optimizer
+
+
 @gin.configurable
 def create_trainer(params: config_definitions.ExperimentConfig,
                    task: base_task.Task,
@@ -218,8 +241,7 @@ def create_trainer(params: config_definitions.ExperimentConfig,
   """Create trainer."""
   logging.info('Running default trainer.')
   model = task.build_model()
-  optimizer = task.create_optimizer(params.trainer.optimizer_config,
-                                    params.runtime)
+  optimizer = create_optimizer(task, params)
   return trainer_cls(
       params,
       task,

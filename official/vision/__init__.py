@@ -12,3 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+"""Vision package definition."""
+# pylint: disable=unused-import
+from official.vision import configs
+from official.vision import tasks

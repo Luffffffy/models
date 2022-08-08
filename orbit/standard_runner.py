@@ -360,7 +360,7 @@ class StandardEvaluator(runner.AbstractEvaluator, metaclass=abc.ABCMeta):
     Note that this method is called before dataset iterator creation.
 
     Returns:
-      An value to pass as the `state` argument to `eval_reduce`.
+      A value to pass as the `state` argument to `eval_reduce`.
     """
     pass
 
@@ -421,7 +421,7 @@ class StandardEvaluator(runner.AbstractEvaluator, metaclass=abc.ABCMeta):
     evaluation for subsequent processing in `eval_end()`.
 
     Args:
-      state: A state being mainted throughout the evaluation.
+      state: A state being maintained throughout the evaluation.
       step_outputs: Outputs from the current evaluation step.
 
     Returns:

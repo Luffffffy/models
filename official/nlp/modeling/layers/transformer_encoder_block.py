@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Keras-based TransformerEncoder block layer."""
-
+from typing import Any, Optional
 from absl import logging
 import tensorflow as tf
 
@@ -75,7 +75,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     E.g. let's say input dims are `[batch_size, seq_dim, input_last_dim]`.
     Scenario 1: If `output_last_dim` is not `None`, then the output dims of this
     module would be `[batch_size, seq_dim, output_last_dim]`. Note `key_dim` is
-    is overriden by `output_last_dim`.
+    overriden by `output_last_dim`.
     Scenario 2: If `output_last_dim` is `None` and `key_dim` is not `None`, then
     the output dims of this module would be `[batch_size, seq_dim, key_dim]`.
     Scenario 3: If the `output_last_dim` and `key_dim` are both `None`, the
@@ -129,12 +129,15 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     util.filter_kwargs(kwargs)
     super().__init__(**kwargs)
 
+    # Deprecation warning.
+    if output_range is not None:
+      logging.warning("`output_range` is avaliable as an argument for `call()`."
+                      "The `output_range` as __init__ argument is deprecated.")
+
     self._num_heads = num_attention_heads
     self._inner_dim = inner_dim
     self._inner_activation = inner_activation
-    self._attention_dropout = attention_dropout
     self._attention_dropout_rate = attention_dropout
-    self._output_dropout = output_dropout
     self._output_dropout_rate = output_dropout
     self._output_range = output_range
     self._kernel_initializer = tf.keras.initializers.get(kernel_initializer)
@@ -198,7 +201,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         num_heads=self._num_heads,
         key_dim=self._key_dim,
         value_dim=self._value_dim,
-        dropout=self._attention_dropout,
+        dropout=self._attention_dropout_rate,
         use_bias=self._use_bias,
         kernel_initializer=self._attention_initializer,
         bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
@@ -206,7 +209,8 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         output_shape=self._output_last_dim,
         name="self_attention",
         **common_kwargs)
-    self._attention_dropout = tf.keras.layers.Dropout(rate=self._output_dropout)
+    self._attention_dropout = tf.keras.layers.Dropout(
+        rate=self._attention_dropout_rate)
     # Use float32 in layernorm for numeric stability.
     # It is probably safe in mixed_float16, but we haven't validated this yet.
     self._attention_layer_norm = (
@@ -250,7 +254,8 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         kernel_initializer=tf_utils.clone_initializer(self._kernel_initializer),
         bias_initializer=tf_utils.clone_initializer(self._bias_initializer),
         **common_kwargs)
-    self._output_dropout = tf.keras.layers.Dropout(rate=self._output_dropout)
+    self._output_dropout = tf.keras.layers.Dropout(
+        rate=self._output_dropout_rate)
     # Use float32 in layernorm for numeric stability.
     self._output_layer_norm = tf.keras.layers.LayerNormalization(
         name="output_layer_norm",
@@ -258,7 +263,7 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         epsilon=self._norm_epsilon,
         dtype=tf.float32)
 
-    super(TransformerEncoderBlock, self).build(input_shape)
+    super().build(input_shape)
 
   def get_config(self):
     config = {
@@ -310,10 +315,10 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         "diff_q_kv_att_layer_norm":
             self._diff_q_kv_att_layer_norm,
     }
-    base_config = super(TransformerEncoderBlock, self).get_config()
+    base_config = super().get_config()
     return dict(list(base_config.items()) + list(config.items()))
 
-  def call(self, inputs):
+  def call(self, inputs: Any, output_range: Optional[tf.Tensor] = None) -> Any:
     """Transformer self-attention encoder block call.
 
     Args:
@@ -324,6 +329,10 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
         [`query tensor`, `key value tensor`, `attention mask`] to have separate
           input streams for the query, and key/value to the multi-head
           attention.
+      output_range: the sequence output range, [0, output_range) for slicing the
+        target sequence. `None` means the target sequence is not sliced. If you
+        would like to have no change to the model training, it is better to only
+        set the `output_range` for serving.
 
     Returns:
       An output tensor with the same dimensions as input/query tensor.
@@ -340,15 +349,16 @@ class TransformerEncoderBlock(tf.keras.layers.Layer):
     else:
       input_tensor, key_value, attention_mask = (inputs, None, None)
 
-    if self._output_range:
+    output_range = output_range or self._output_range
+    if output_range:
       if self._norm_first:
-        source_tensor = input_tensor[:, 0:self._output_range, :]
+        source_tensor = input_tensor[:, 0:output_range, :]
         input_tensor = self._attention_layer_norm(input_tensor)
         if key_value is not None:
           key_value = self._attention_layer_norm_kv(key_value)
-      target_tensor = input_tensor[:, 0:self._output_range, :]
+      target_tensor = input_tensor[:, 0:output_range, :]
       if attention_mask is not None:
-        attention_mask = attention_mask[:, 0:self._output_range, :]
+        attention_mask = attention_mask[:, 0:output_range, :]
     else:
       if self._norm_first:
         source_tensor = input_tensor

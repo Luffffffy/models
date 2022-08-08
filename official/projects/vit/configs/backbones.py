@@ -13,9 +13,8 @@
 # limitations under the License.
 
 """Backbones configurations."""
-from typing import Optional
-
 import dataclasses
+from typing import Optional, Tuple
 
 from official.modeling import hyperparams
 
@@ -35,7 +34,7 @@ class VisionTransformer(hyperparams.Config):
   """VisionTransformer config."""
   model_name: str = 'vit-b16'
   # pylint: disable=line-too-long
-  classifier: str = 'token'  # 'token' or 'gap'. If set to 'token', an extra classification token is added to sequence.
+  pooler: str = 'token'  # 'token', 'gap' or 'none'. If set to 'token', an extra classification token is added to sequence.
   # pylint: enable=line-too-long
   representation_size: int = 0
   hidden_size: int = 1
@@ -43,6 +42,7 @@ class VisionTransformer(hyperparams.Config):
   transformer: Transformer = Transformer()
   init_stochastic_depth_rate: float = 0.0
   original_init: bool = True
+  pos_embed_shape: Optional[Tuple[int, int]] = None
 
 
 @dataclasses.dataclass

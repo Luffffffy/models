@@ -20,7 +20,7 @@ extent possible though not all models are suitable.
 
 | Directory | Description |
 |-----------|-------------|
-| [official](official) | • A collection of example implementations for SOTA models using the latest TensorFlow 2's high-level APIs<br />• Officially maintained, supported, and kept up to date with the latest TensorFlow 2 APIs by TensorFlow<br />• Reasonably optimized for fast performance while still being easy to read |
+| [official](official) | • A collection of example implementations for SOTA models using the latest TensorFlow 2's high-level APIs<br />• Officially maintained, supported, and kept up to date with the latest TensorFlow 2 APIs by TensorFlow<br />• Reasonably optimized for fast performance while still being easy to read<br /> For more details on the capabilities, check the guide on the [Model-garden](https://www.tensorflow.org/tfmodels)|
 | [research](research) | • A collection of research model implementations in TensorFlow 1 or 2 by researchers<br />• Maintained and supported by researchers |
 | [community](community) | • A curated list of the GitHub repositories with machine learning models and implementations powered by TensorFlow 2 |
 | [orbit](orbit) | • A flexible and lightweight library that users can easily use or fork when writing customized training loop code in TensorFlow 2.x. It seamlessly integrates with `tf.distribute` and supports running on different device types (CPU, GPU, and TPU). |
@@ -43,7 +43,7 @@ pip3 install tf-models-official
 
 Please check out our examples:
   - [basic library import](https://github.com/tensorflow/models/blob/master/tensorflow_models/tensorflow_models_pypi.ipynb)
-  - [nlp model building](https://github.com/tensorflow/models/blob/master/official/colab/nlp/nlp_modeling_library_intro.ipynb)
+  - [nlp model building](https://github.com/tensorflow/models/blob/master/docs/nlp/index.ipynb)
 to learn how to use a PIP package.
 
 Note that **tf-models-official** may not include the latest changes in the master branch of this
@@ -73,6 +73,11 @@ git clone https://github.com/tensorflow/models.git
 export PYTHONPATH=$PYTHONPATH:/path/to/models
 ```
 
+If you are using in a Windows environment, you may need to use the following command with PowerShell:
+```shell
+$env:PYTHONPATH += ":\path\to\models"
+```
+
 If you are using a Colab notebook, please set the Python path with os.environ.
 
 ```python
@@ -83,7 +88,7 @@ os.environ['PYTHONPATH'] += ":/path/to/models"
 3. Install other dependencies
 
 ```shell
-pip3 install --user -r official/requirements.txt
+pip3 install --user -r models/official/requirements.txt
 ```
 
 Finally, if you are using nlp packages, please also install

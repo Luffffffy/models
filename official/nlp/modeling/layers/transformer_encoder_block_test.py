@@ -125,6 +125,9 @@ class TransformerEncoderBlockLayerTest(keras_parameterized.TestCase):
     self.assertAllClose(
         new_output_tensor, output_tensor[:, 0:1, :], atol=5e-5, rtol=0.003)
 
+    output_tensor = test_layer([input_data, mask_data], output_range=1)
+    self.assertAllClose(new_output_tensor, output_tensor, atol=5e-5, rtol=0.003)
+
   def test_layer_output_range_without_mask(self, transformer_cls):
     test_layer = transformer_cls(
         num_attention_heads=10, inner_dim=2048,
@@ -178,6 +181,9 @@ class TransformerEncoderBlockLayerTest(keras_parameterized.TestCase):
     new_output_tensor = new_layer([input_data, mask_data])
     self.assertAllClose(
         new_output_tensor, output_tensor[:, 0:1, :], atol=5e-5, rtol=0.003)
+
+    output_tensor = test_layer([input_data, mask_data], output_range=1)
+    self.assertAllClose(new_output_tensor, output_tensor, atol=5e-5, rtol=0.003)
 
   def test_layer_invocation_with_float16_dtype(self, transformer_cls):
     tf.keras.mixed_precision.set_global_policy('mixed_float16')
@@ -631,6 +637,41 @@ class TransformerArgumentTest(keras_parameterized.TestCase):
     output_tensor = test_layer(data_tensor)
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
+
+  @parameterized.parameters({'output_dropout': 0.1,
+                             'attention_dropout': 0.2,
+                             'inner_dropout': 0.3},
+                            {'output_dropout': 0.0,
+                             'attention_dropout': 0.2,
+                             'inner_dropout': 0.3},
+                            {'output_dropout': 0.1,
+                             'attention_dropout': 0.0,
+                             'inner_dropout': 0.3},
+                            {'output_dropout': 0.1,
+                             'attention_dropout': 0.2,
+                             'inner_dropout': 0.0})
+  def test_dropout_config(self,
+                          output_dropout,
+                          attention_dropout,
+                          inner_dropout):
+    test_layer = TransformerEncoderBlock(
+        num_attention_heads=2,
+        inner_dim=32,
+        inner_activation='relu',
+        output_dropout=output_dropout,
+        attention_dropout=attention_dropout,
+        inner_dropout=inner_dropout)
+    seq_len = 21
+    hidden_size = 512
+    input_tensor = tf.keras.Input(shape=(seq_len, hidden_size))
+    _ = test_layer(input_tensor)
+
+    true_output_dropout = test_layer._output_dropout.get_config()['rate']
+    true_attention_dropout = test_layer._attention_dropout.get_config()['rate']
+    true_inner_dropout = test_layer._inner_dropout_layer.get_config()['rate']
+    self.assertEqual(true_output_dropout, output_dropout)
+    self.assertEqual(true_attention_dropout, attention_dropout)
+    self.assertEqual(true_inner_dropout, inner_dropout)
 
 
 if __name__ == '__main__':

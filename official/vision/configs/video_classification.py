@@ -41,6 +41,7 @@ class DataConfig(cfg.DataConfig):
   global_batch_size: int = 128
   data_format: str = 'channels_last'
   dtype: str = 'float32'
+  label_dtype: str = 'int32'
   one_hot: bool = True
   shuffle_buffer_size: int = 64
   cache: bool = False
@@ -58,7 +59,9 @@ class DataConfig(cfg.DataConfig):
   aug_max_aspect_ratio: float = 2.0
   aug_min_area_ratio: float = 0.49
   aug_max_area_ratio: float = 1.0
-  aug_type: Optional[str] = None  # 'autoaug', 'randaug', or None
+  aug_type: Optional[
+      common.Augmentation] = None  # AutoAugment and RandAugment.
+  mixup_and_cutmix: Optional[common.MixupAndCutmix] = None
   image_field_key: str = 'image/encoded'
   label_field_key: str = 'clip/label/index'
 

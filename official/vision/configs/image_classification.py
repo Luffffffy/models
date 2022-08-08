@@ -36,6 +36,7 @@ class DataConfig(cfg.DataConfig):
   cycle_length: int = 10
   is_multilabel: bool = False
   aug_rand_hflip: bool = True
+  aug_crop: Optional[bool] = True
   aug_type: Optional[
       common.Augmentation] = None  # Choose from AutoAugment and RandAugment.
   color_jitter: float = 0.
@@ -97,6 +98,7 @@ class ImageClassificationTask(cfg.TaskConfig):
   init_checkpoint_modules: str = 'all'  # all or backbone
   model_output_keys: Optional[List[int]] = dataclasses.field(
       default_factory=list)
+  freeze_backbone: bool = False
 
 
 @exp_factory.register_config_factory('image_classification')

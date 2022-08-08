@@ -317,7 +317,7 @@ def _fill_rectangle(image,
                     half_width,
                     half_height,
                     replace=None):
-  """Fill blank area."""
+  """Fills blank area."""
   image_height = tf.shape(image)[0]
   image_width = tf.shape(image)[1]
 
@@ -337,6 +337,45 @@ def _fill_rectangle(image,
       constant_values=1)
   mask = tf.expand_dims(mask, -1)
   mask = tf.tile(mask, [1, 1, 3])
+
+  if replace is None:
+    fill = tf.random.normal(tf.shape(image), dtype=image.dtype)
+  elif isinstance(replace, tf.Tensor):
+    fill = replace
+  else:
+    fill = tf.ones_like(image, dtype=image.dtype) * replace
+  image = tf.where(tf.equal(mask, 0), fill, image)
+
+  return image
+
+
+def _fill_rectangle_video(image,
+                          center_width,
+                          center_height,
+                          half_width,
+                          half_height,
+                          replace=None):
+  """Fills blank area for video."""
+  image_time = tf.shape(image)[0]
+  image_height = tf.shape(image)[1]
+  image_width = tf.shape(image)[2]
+
+  lower_pad = tf.maximum(0, center_height - half_height)
+  upper_pad = tf.maximum(0, image_height - center_height - half_height)
+  left_pad = tf.maximum(0, center_width - half_width)
+  right_pad = tf.maximum(0, image_width - center_width - half_width)
+
+  cutout_shape = [
+      image_time, image_height - (lower_pad + upper_pad),
+      image_width - (left_pad + right_pad)
+  ]
+  padding_dims = [[0, 0], [lower_pad, upper_pad], [left_pad, right_pad]]
+  mask = tf.pad(
+      tf.zeros(cutout_shape, dtype=image.dtype),
+      padding_dims,
+      constant_values=1)
+  mask = tf.expand_dims(mask, -1)
+  mask = tf.tile(mask, [1, 1, 1, 3])
 
   if replace is None:
     fill = tf.random.normal(tf.shape(image), dtype=image.dtype)
@@ -1915,7 +1954,7 @@ def _maybe_identity(x: Optional[tf.Tensor]) -> Optional[tf.Tensor]:
 class RandAugment(ImageAugment):
   """Applies the RandAugment policy to images.
 
-  RandAugment is from the paper https://arxiv.org/abs/1909.13719,
+  RandAugment is from the paper https://arxiv.org/abs/1909.13719.
   """
 
   def __init__(self,
@@ -2066,7 +2105,8 @@ class RandomErasing(ImageAugment):
 
   Reference: https://arxiv.org/abs/1708.04896
 
-  Implementaion is inspired by https://github.com/rwightman/pytorch-image-models
+  Implementation is inspired by
+  https://github.com/rwightman/pytorch-image-models.
   """
 
   def __init__(self,
@@ -2074,29 +2114,25 @@ class RandomErasing(ImageAugment):
                min_area: float = 0.02,
                max_area: float = 1 / 3,
                min_aspect: float = 0.3,
-               max_aspect=None,
+               max_aspect: Optional[float] = None,
                min_count=1,
                max_count=1,
                trials=10):
     """Applies RandomErasing to a single image.
 
     Args:
-      probability (float, optional): Probability of augmenting the image.
-        Defaults to 0.25.
-      min_area (float, optional): Minimum area of the random erasing rectangle.
-        Defaults to 0.02.
-      max_area (float, optional): Maximum area of the random erasing rectangle.
-        Defaults to 1/3.
-      min_aspect (float, optional): Minimum aspect rate of the random erasing
-        rectangle. Defaults to 0.3.
-      max_aspect ([type], optional): Maximum aspect rate of the random erasing
-        rectangle. Defaults to None.
-      min_count (int, optional): Minimum number of erased rectangles. Defaults
-        to 1.
-      max_count (int, optional):  Maximum number of erased rectangles. Defaults
-        to 1.
-      trials (int, optional): Maximum number of trials to randomly sample a
-        rectangle that fulfills constraint. Defaults to 10.
+      probability: Probability of augmenting the image. Defaults to `0.25`.
+      min_area: Minimum area of the random erasing rectangle. Defaults to
+        `0.02`.
+      max_area: Maximum area of the random erasing rectangle. Defaults to `1/3`.
+      min_aspect: Minimum aspect rate of the random erasing rectangle. Defaults
+        to `0.3`.
+      max_aspect: Maximum aspect rate of the random erasing rectangle. Defaults
+        to `None`.
+      min_count: Minimum number of erased rectangles. Defaults to `1`.
+      max_count: Maximum number of erased rectangles. Defaults to `1`.
+      trials: Maximum number of trials to randomly sample a rectangle that
+        fulfills constraint. Defaults to `10`.
     """
     self._probability = probability
     self._min_area = float(min_area)
@@ -2239,8 +2275,9 @@ class MixupAndCutmix:
     """Applies Mixup and/or Cutmix to batch of images and transforms labels.
 
     Args:
-      images (tf.Tensor): Of shape [batch_size,height, width, 3] representing a
-        batch of image.
+      images (tf.Tensor): Of shape [batch_size, height, width, 3] representing a
+        batch of image, or [batch_size, time, height, width, 3] representing a
+        batch of video.
       labels (tf.Tensor): Of shape [batch_size, ] representing the class id for
         each image of the batch.
 
@@ -2248,6 +2285,7 @@ class MixupAndCutmix:
       Tuple[tf.Tensor, tf.Tensor]: The augmented version of `image` and
         `labels`.
     """
+    labels = tf.reshape(labels, [-1])
     augment_cond = tf.less(
         tf.random.uniform(shape=[], minval=0., maxval=1.0), self.mix_prob)
     # pylint: disable=g-long-lambda
@@ -2269,14 +2307,22 @@ class MixupAndCutmix:
 
   def _cutmix(self, images: tf.Tensor,
               labels: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
-    """Apply cutmix."""
+    """Applies cutmix."""
     lam = MixupAndCutmix._sample_from_beta(self.cutmix_alpha, self.cutmix_alpha,
                                            tf.shape(labels))
 
     ratio = tf.math.sqrt(1 - lam)
 
     batch_size = tf.shape(images)[0]
-    image_height, image_width = tf.shape(images)[1], tf.shape(images)[2]
+
+    if images.shape.rank == 4:
+      image_height, image_width = tf.shape(images)[1], tf.shape(images)[2]
+      fill_fn = _fill_rectangle
+    elif images.shape.rank == 5:
+      image_height, image_width = tf.shape(images)[2], tf.shape(images)[3]
+      fill_fn = _fill_rectangle_video
+    else:
+      raise ValueError('Bad image rank: {}'.format(images.shape.rank))
 
     cut_height = tf.cast(
         ratio * tf.cast(image_height, dtype=tf.float32), dtype=tf.int32)
@@ -2293,7 +2339,7 @@ class MixupAndCutmix:
     lam = tf.cast(lam, dtype=tf.float32)
 
     images = tf.map_fn(
-        lambda x: _fill_rectangle(*x),
+        lambda x: fill_fn(*x),
         (images, random_center_width, random_center_height, cut_width // 2,
          cut_height // 2, tf.reverse(images, [0])),
         dtype=(
@@ -2304,9 +2350,16 @@ class MixupAndCutmix:
 
   def _mixup(self, images: tf.Tensor,
              labels: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor, tf.Tensor]:
+    """Applies mixup."""
     lam = MixupAndCutmix._sample_from_beta(self.mixup_alpha, self.mixup_alpha,
                                            tf.shape(labels))
-    lam = tf.reshape(lam, [-1, 1, 1, 1])
+    if images.shape.rank == 4:
+      lam = tf.reshape(lam, [-1, 1, 1, 1])
+    elif images.shape.rank == 5:
+      lam = tf.reshape(lam, [-1, 1, 1, 1, 1])
+    else:
+      raise ValueError('Bad image rank: {}'.format(images.shape.rank))
+
     lam_cast = tf.cast(lam, dtype=images.dtype)
     images = lam_cast * images + (1. - lam_cast) * tf.reverse(images, [0])
 

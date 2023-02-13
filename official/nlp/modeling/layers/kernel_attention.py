@@ -49,11 +49,10 @@ def pad_to_chunk_length(tensor, axis, chunk_length, padding=None):
     axis: Axis to pad along.
     chunk_length: The output tensor will have shape[axis] divisible by
       chunk_length.
-    padding: Pad the input tensor across the axis from either left or
-      right if padding is set to "left" or "right"; applies no padding
-      if padding is set to None. In the latter case, the axis
-      dimension of the input tensor must be divisible by the
-      chunk_length.
+    padding: Pad the input tensor across the axis from either left or right if
+      padding is set to "left" or "right"; applies no padding if padding is set
+      to None. In the latter case, the axis dimension of the input tensor must
+      be divisible by the chunk_length.
 
   Returns:
     Padded tensor with shape[axis] divisible by chunk_length.
@@ -73,10 +72,11 @@ def pad_to_chunk_length(tensor, axis, chunk_length, padding=None):
   else:
     raise ValueError(
         "Illegal padding value; must be one of \"left\", \"right\" or None.")
-  paddings = tf.concat(
-      [tf.zeros([axis, 2], dtype=tf.int32),
-       axis_paddings,
-       tf.zeros([rank - axis - 1, 2], dtype=tf.int32)], axis=0)
+  paddings = tf.concat([
+      tf.zeros([axis, 2], dtype=tf.int32), axis_paddings,
+      tf.zeros([rank - axis - 1, 2], dtype=tf.int32)
+  ],
+                       axis=0)
   return tf.pad(tensor, paddings)
 
 
@@ -94,7 +94,7 @@ def split_tensor_into_chunks(tensor, axis, chunk_length):
   shape = tf.shape(tensor)
   num_chunks = shape[axis] // chunk_length
   new_shape = tf.concat(
-      [shape[:axis], [num_chunks, chunk_length], shape[(axis+1):]], axis=0)
+      [shape[:axis], [num_chunks, chunk_length], shape[(axis + 1):]], axis=0)
   return tf.reshape(tensor, new_shape)
 
 
@@ -128,8 +128,7 @@ def weighted_window_sum(tensor, window_length, window_weights):
   Args:
     tensor: Tensor of shape `[B, T', C', H, dim]`.
     window_length: The length of the window.
-    window_weights: Tensor of shape [window_length] containing window
-      weights.
+    window_weights: Tensor of shape [window_length] containing window weights.
 
   Returns:
     A tensor of shape [B, T', C', H, dim] containing sums over the
@@ -161,7 +160,8 @@ def causal_windowed_performer_attention(query_matrix,
                                         chunk_length,
                                         window_length,
                                         window_decay=None,
-                                        padding=None):
+                                        padding=None,
+                                        cache=None):
   """Applies windowed causal kernel attention with query, key, value tensors.
 
   We partition the T-length input sequence into N chunks, each of
@@ -196,63 +196,84 @@ def causal_windowed_performer_attention(query_matrix,
     value_matrix: Value `Tensor` of shape `[B, T, H, out_dim]`.
     chunk_length: Length of each chunk in tokens.
     window_length: Length of attention window in chunks.
-    window_decay: Float window decay factor or `None`. If set,
-      exponentially decay past attention window values by this factor
-      before summation.
-    padding: Pad the query, value and key input tensors across the
-      axis from either left or right if padding is set to "left" or
-      "right"; apply no padding if padding is set to None. In the
-      latter case, the axis dimension of the query, value and key
-      input tensors must be divisible by the chunk_length.
+    window_decay: Float window decay factor or `None`. If set, exponentially
+      decay past attention window values by this factor before summation.
+    padding: Pad the query, value and key input tensors across the axis from
+      either left or right if padding is set to "left" or "right"; apply no
+      padding if padding is set to None. In the latter case, the axis dimension
+      of the query, value and key input tensors must be divisible by the
+      chunk_length.
+    cache: Cache to accumulate history in memory. Used at inferecne time
+      (streaming, decoding) for  causal attention.
 
   Returns:
     Window causal performer attention of shape `[B, T, H, out_dim]`.
   """
-  old_shape = tf.shape(value_matrix)
+  if cache is None:  # Training
+    old_shape = tf.shape(value_matrix)
 
-  query_matrix = pad_to_chunk_length(query_matrix, -3, chunk_length, padding)
-  key_matrix = pad_to_chunk_length(key_matrix, -3, chunk_length, padding)
-  value_matrix = pad_to_chunk_length(value_matrix, -3, chunk_length, padding)
+    query_matrix = pad_to_chunk_length(query_matrix, -3, chunk_length, padding)
+    key_matrix = pad_to_chunk_length(key_matrix, -3, chunk_length, padding)
+    value_matrix = pad_to_chunk_length(value_matrix, -3, chunk_length, padding)
 
-  new_shape = tf.shape(value_matrix)
-  chunked_query_matrix = split_tensor_into_chunks(
-      query_matrix, -3,
-      chunk_length)  # [-1, T//chunk_length, chunk_length, N, dim]
-  chunked_key_matrix = split_tensor_into_chunks(
-      key_matrix, -3,
-      chunk_length)  # [-1, T//chunk_length, chunk_length, N, dim]
-  chunked_value_matrix = split_tensor_into_chunks(
-      value_matrix, -3,
-      chunk_length)  # [-1, T//chunk_length, chunk_length, N, out_dim]
+    new_shape = tf.shape(value_matrix)
+    chunked_query_matrix = split_tensor_into_chunks(
+        query_matrix, -3,
+        chunk_length)  # [-1, T//chunk_length, chunk_length, N, dim]
+    chunked_key_matrix = split_tensor_into_chunks(
+        key_matrix, -3,
+        chunk_length)  # [-1, T//chunk_length, chunk_length, N, dim]
+    chunked_value_matrix = split_tensor_into_chunks(
+        value_matrix, -3,
+        chunk_length)  # [-1, T//chunk_length, chunk_length, N, out_dim]
 
-  kp_v = tf.einsum("BTCHD,BTCHO->BTHDO", chunked_key_matrix,
-                   chunked_value_matrix)
+    kp_v = tf.einsum("BTCHD,BTCHO->BTHDO", chunked_key_matrix,
+                     chunked_value_matrix)
 
-  k_sum = tf.math.reduce_sum(chunked_key_matrix, axis=-3, keepdims=True)
+    k_sum = tf.math.reduce_sum(chunked_key_matrix, axis=-3, keepdims=True)
 
-  if window_decay is None:
-    kp_v_winsum = rectangular_window_sum(kp_v, window_length)
-    k_winsum = rectangular_window_sum(k_sum, window_length)
-  else:
-    # Compute exponentially decaying weights.
-    decaying_weights = tf.math.pow(
-        tf.convert_to_tensor(window_decay, dtype=value_matrix.dtype),
-        tf.range(window_length - 1, -1, delta=-1, dtype=value_matrix.dtype))
-    kp_v_winsum = weighted_window_sum(kp_v, window_length, decaying_weights)
-    k_winsum = weighted_window_sum(k_sum, window_length, decaying_weights)
+    if window_decay is None:
+      kp_v_winsum = rectangular_window_sum(kp_v, window_length)
+      k_winsum = rectangular_window_sum(k_sum, window_length)
+    else:
+      # Compute exponentially decaying weights.
+      decaying_weights = tf.math.pow(
+          tf.convert_to_tensor(window_decay, dtype=value_matrix.dtype),
+          tf.range(window_length - 1, -1, delta=-1, dtype=value_matrix.dtype))
+      kp_v_winsum = weighted_window_sum(kp_v, window_length, decaying_weights)
+      k_winsum = weighted_window_sum(k_sum, window_length, decaying_weights)
 
-  numerator = tf.einsum("BTCHD,BTHDO->BTCHO", chunked_query_matrix, kp_v_winsum)
+    numerator = tf.einsum(
+        "BTCHD,BTHDO->BTCHO", chunked_query_matrix, kp_v_winsum)
 
-  k_winsum = tf.squeeze(k_winsum, -3)
-  denominator = tf.einsum("BTCHD,BTHD->BTCH", chunked_query_matrix, k_winsum)
-  denominator = tf.expand_dims(denominator, -1) + _NUMERIC_STABLER
+    k_winsum = tf.squeeze(k_winsum, -3)
+    denominator = tf.einsum("BTCHD,BTHD->BTCH", chunked_query_matrix, k_winsum)
+    denominator = tf.expand_dims(denominator, -1) + _NUMERIC_STABLER
+    attention = numerator / denominator
+    attention = tf.reshape(attention, new_shape)
 
-  attention = numerator / denominator
-  attention = tf.reshape(attention, new_shape)
+    start = tf.zeros([old_shape.shape[0]], dtype=old_shape.dtype)
+    attention = tf.slice(attention, start, old_shape)
 
-  start = tf.zeros([len(old_shape)], dtype=old_shape.dtype)
-  attention = tf.slice(attention, start, old_shape)
+  # Queued window cache (drop instead of decay) not yet supported.
+  else:  # Streaming
 
+    if window_decay is None or window_decay > 1.0 or window_decay < 0.0:
+      raise ValueError("window_decay should be in (0.0, 1.0) and not None.")
+    kv = window_decay * cache["kv"] + tf.einsum(
+        "BTHD,BTHO->BHOD", key_matrix, value_matrix)
+    cache["kv"] = kv
+    k_sum = window_decay * cache["k_sum"] + tf.reduce_sum(key_matrix, axis=1)
+    cache["k_sum"] = k_sum
+    denominator = tf.einsum("BTHD,BHD->BTH", query_matrix, k_sum)
+    # The below is equivalent to but converts to TF Lite better than:
+    #   tf.einsum("BTHD,BTH->BTHD",
+    #             query_matrix, 1.0 / (denominator + _NUMERIC_STABLER))
+    inverse_denominator = 1.0 / (denominator + _NUMERIC_STABLER)
+    # Add another dimension to align for the broadcast multiplication.
+    fused_query_denominator = query_matrix * tf.expand_dims(inverse_denominator,
+                                                            -1)
+    attention = tf.einsum("BTHD,BHOD->BTHO", fused_query_denominator, kv)
   return attention
 
 
@@ -302,11 +323,13 @@ def create_projection_matrix(m, d, seed=None):
   return tf.linalg.matmul(tf.linalg.diag(multiplier), final_matrix)
 
 
-def _generalized_kernel(x, projection_matrix, f, h):
+def _generalized_kernel(x, y, is_query, projection_matrix, f, h):
   """Generalized kernel in RETHINKING ATTENTION WITH PERFORMERS.
 
   Args:
     x: The feature being transformed with shape [B, T, N ,H].
+    y: The extra stats-tensor of shape [B, T, N ,H].
+    is_query: True if x is a query-tensor.
     projection_matrix: The matrix with shape [M, H] that we projecct x to, where
       M is the number of projections.
     f: A non-linear function applied on x or projected x.
@@ -316,7 +339,8 @@ def _generalized_kernel(x, projection_matrix, f, h):
   Returns:
     Transformed feature.
   """
-
+  del y
+  del is_query
   if projection_matrix is None:
     return h(x) * f(x)
   else:
@@ -442,7 +466,7 @@ def expplus(data_orig,
 
 
 # pylint: disable=g-long-lambda
-_TRANSFORM_MAP = {
+_CAUSAL_SUPPORT_TRANSFORM_MAP = {
     "elu":
         functools.partial(
             _generalized_kernel,
@@ -478,6 +502,16 @@ _TRANSFORM_MAP = {
     "identity":
         functools.partial(_generalized_kernel, f=lambda x: x, h=lambda x: 1)
 }
+
+_NON_CAUSAL_SUPPORT_TRANSFORM_MAP = {
+    "expplus": expplus,
+}
+
+_TRANSFORM_MAP = {
+    **_CAUSAL_SUPPORT_TRANSFORM_MAP,
+    **_NON_CAUSAL_SUPPORT_TRANSFORM_MAP
+}
+
 # pylint: enable=g-long-lambda
 
 
@@ -554,18 +588,16 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
       causal_chunk_length: Length of each chunk in tokens.
       causal_window_length: Length of attention window in chunks.
       causal_window_decay: Float window decay factor or `None`. If set,
-        exponentially decay past attention window values by this
-        factor before summation.
-      causal_padding: Pad the query, value and key input tensors
-        across the axis from either left or right if padding is set to
-        "left" or "right"; apply no padding if padding is set to None.
-        In the latter case, the axis dimension of the query, value and
-        key input tensors must be divisible by the chunk_length.
-      **kwargs:
-        The same arguments `MultiHeadAttention` layer.
+        exponentially decay past attention window values by this factor before
+        summation.
+      causal_padding: Pad the query, value and key input tensors across the axis
+        from either left or right if padding is set to "left" or "right"; apply
+        no padding if padding is set to None. In the latter case, the axis
+        dimension of the query, value and key input tensors must be divisible by
+        the chunk_length.
+      **kwargs: The same arguments `MultiHeadAttention` layer.
     """
-    if (feature_transform not in _TRANSFORM_MAP and
-        feature_transform != "expplus"):
+    if feature_transform not in _TRANSFORM_MAP:
       raise ValueError("Unsupported feature_transform. The supported "
                        "feature_transform are %s. "
                        "Got '%s'." % (_TRANSFORM_MAP.keys(), feature_transform))
@@ -608,6 +640,7 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
                          feature_transform,
                          is_short_seq,
                          attention_mask=None,
+                         cache=None,
                          training=False,
                          numeric_stabler=_NUMERIC_STABLER):
     """Applies kernel attention with query, key, value tensors.
@@ -627,6 +660,8 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
       attention_mask: a boolean mask of shape `[B, S]`, that prevents attenting
         to masked positions. Note that the mask is only appied to the keys. User
         may want to mask the output if query contains pads.
+      cache: Cache to accumulate history in memory. Used at inferecne time
+        (streaming, decoding) for  causal attention.
       training: Python boolean indicating whether the layer should behave in
         training mode (adding dropout) or in inference mode (doing nothing).
       numeric_stabler: A scalar value added to avoid divide by 0.
@@ -661,12 +696,10 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
       key *= tf.math.sqrt(scale)
       query *= tf.math.sqrt(scale)
 
-    if feature_transform != "expplus":
-      key_prime = _TRANSFORM_MAP[feature_transform](key, projection_matrix)
-      query_prime = _TRANSFORM_MAP[feature_transform](query, projection_matrix)
-    else:
-      key_prime = expplus(key, query, False, projection_matrix)
-      query_prime = expplus(query, key, True, projection_matrix)
+    key_prime = _TRANSFORM_MAP[feature_transform](key, query, False,
+                                                  projection_matrix)
+    query_prime = _TRANSFORM_MAP[feature_transform](query, key, True,
+                                                    projection_matrix)
 
     if attention_mask is not None:
       key_prime = tf.einsum("BSNH,BS->BSNH", key_prime, attention_mask)
@@ -677,11 +710,14 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
       attention_output = tf.einsum("BTSN,BSNH->BTNH", attention_scores, value)
     elif self.use_causal_windowed:
       attention_output = causal_windowed_performer_attention(
-          query_prime, key_prime, value,
+          query_prime,
+          key_prime,
+          value,
           chunk_length=self.causal_chunk_length,
           window_length=self.causal_window_length,
           window_decay=self.causal_window_decay,
-          padding=self.causal_padding)
+          padding=self.causal_padding,
+          cache=cache)
     else:
       kv = tf.einsum("BSNH,BSND->BNDH", key_prime, value)
       denominator = 1.0 / (
@@ -708,7 +744,8 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
           name="attention_output_softmax")
       self._dropout_softmax = tf.keras.layers.Dropout(rate=self._dropout)
 
-  def call(self, query, value, key=None, attention_mask=None, training=False):
+  def call(self, query, value, key=None, attention_mask=None, cache=None,
+           training=False):
     """Compute attention with kernel mechanism.
 
     Args:
@@ -719,12 +756,29 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
       attention_mask: a boolean mask of shape `[B, S]`, that prevents attenting
         to masked positions. Note that the mask is only appied to the keys. User
         may want to mask the output if query contains pads.
+      cache: Cache to accumulate history in memory. Used at inferecne time
+        (streaming, decoding) for  causal attention.
       training: Python boolean indicating whether the layer should behave in
         training mode (adding dropout) or in inference mode (doing nothing).
 
     Returns:
       Multi-headed outputs of attention computation.
     """
+    if cache is not None:
+      if training:
+        raise ValueError(
+            "Cache is not supported when training is True.")
+      if not self.use_causal_windowed:
+        raise ValueError(
+            "Cache is not supported for non use_causal_windowed case.")
+      if self._begin_kernel:
+        raise ValueError(
+            "Cache is not supported when begin_kernel is set since the bahvior "
+            "is too complicated.")
+      if self._feature_transform in _NON_CAUSAL_SUPPORT_TRANSFORM_MAP:
+        raise ValueError("Cache is not supported for feature_transform %s" %
+                         (self._feature_transform))
+
     if not self._built_from_signature:
       self._build_from_signature(query=query, value=value, key=key)
     if key is None:
@@ -760,7 +814,9 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
       attention_output = self._compute_attention(query, key, value,
                                                  self._feature_transform,
                                                  self._is_short_seq,
-                                                 attention_mask, training)
+                                                 attention_mask,
+                                                 cache,
+                                                 training)
       # This is actually dropping out entire tokens to attend to, which might
       # seem a bit unusual, but is taken from the original Transformer paper.
       attention_output = self._dropout_layer(attention_output)
@@ -776,6 +832,12 @@ class KernelAttention(tf.keras.layers.MultiHeadAttention):
         "is_short_seq": self._is_short_seq,
         "begin_kernel": self._begin_kernel,
         "scale": self._scale,
+        "scale_by_length": self._scale_by_length,
+        "use_causal_windowed": self.use_causal_windowed,
+        "causal_chunk_length": self.causal_chunk_length,
+        "causal_window_length": self.causal_window_length,
+        "causal_window_decay": self.causal_window_decay,
+        "causal_padding": self.causal_padding,
     }
     base_config = super().get_config()
     return dict(list(base_config.items()) + list(config.items()))

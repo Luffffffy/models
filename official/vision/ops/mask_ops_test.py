@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 """Tests for mask_ops.py."""
 
 # Import libraries
@@ -49,6 +48,47 @@ class MaskUtilsTest(tf.test.TestCase):
         image_masks[:, 2:8, 0:6],
         np.array(masks > 0.5, dtype=np.uint8),
         1e-5)
+
+  def testInstanceMasksOverlap(self):
+    boxes = tf.constant([[[0, 0, 4, 4], [1, 1, 5, 5]]])
+    masks = tf.constant([[
+        [
+            [0.9, 0.8, 0.1, 0.2],
+            [0.8, 0.7, 0.3, 0.2],
+            [0.6, 0.7, 0.4, 0.3],
+            [1.0, 0.7, 0.1, 0.0],
+        ],
+        [
+            [0.9, 0.8, 0.8, 0.7],
+            [0.8, 0.7, 0.6, 0.8],
+            [0.1, 0.2, 0.4, 0.3],
+            [0.2, 0.1, 0.1, 0.0],
+        ],
+    ]])
+    gt_boxes = tf.constant([[[1, 1, 5, 5], [2, 2, 6, 6]]])
+    gt_masks = tf.constant([[
+        [
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0, 0.0],
+        ],
+        [
+            [1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
+            [1.0, 1.0, 1.0, 1.0],
+        ],
+    ]])
+    iou, ioa = mask_ops.instance_masks_overlap(
+        boxes,
+        masks,
+        gt_boxes,
+        gt_masks,
+        output_size=[10, 10],
+    )
+    self.assertAllClose(iou, [[[1 / 3, 0], [1 / 5, 1 / 7]]], atol=1e-4)
+    self.assertAllClose(ioa, [[[3 / 8, 0], [1 / 4, 3 / 8]]], atol=1e-4)
 
 
 if __name__ == '__main__':

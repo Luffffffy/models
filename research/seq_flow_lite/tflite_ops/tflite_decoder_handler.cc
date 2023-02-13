@@ -13,15 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "third_party/tensorflow_models/seq_flow_lite/tflite_ops/tflite_decoder_handler.h"
+#include "tflite_ops/tflite_decoder_handler.h"  // seq_flow_lite
 
 #include <cstdint>
 
-#include "third_party/flatbuffers/include/flatbuffers/flexbuffers.h"
-#include "third_party/tensorflow/lite/kernels/internal/tensor_ctypes.h"
-#include "third_party/tensorflow/lite/kernels/kernel_util.h"
-#include "third_party/tensorflow_models/seq_flow_lite/tflite_ops/tflite_decoder_cache.h"
-#include "third_party/tensorflow_models/seq_flow_lite/tflite_ops/quantization_util.h"
+#include "flatbuffers/flexbuffers.h"  // flatbuffer
+#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
+#include "tensorflow/lite/kernels/kernel_util.h"
+#include "tflite_ops/quantization_util.h"  // seq_flow_lite
+#include "tflite_ops/tflite_decoder_cache.h"  // seq_flow_lite
 
 namespace seq_flow_lite {
 namespace ops {
@@ -77,8 +77,8 @@ void UniformDecoderOp::EvalQuantized(int32_t step,
     const float* selected = cur_cache + (selected_beams[i] * FeatureSize());
     for (int j = 0; j < FeatureSize(); ++j, index++) {
       next_cache[index] =
-          selected[j] + ::seq_flow_lite::PodDequantize(*input, index);
-      result[index] = ::seq_flow_lite::PodQuantize(
+          selected[j] + ::seq_flow_lite::PodDequantize<uint8_t>(*input, index);
+      result[index] = ::seq_flow_lite::PodQuantize<uint8_t>(
           next_cache[index], output->params.zero_point,
           normalizer_and_inverse_scale);
     }

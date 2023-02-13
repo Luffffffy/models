@@ -13,7 +13,8 @@
 # limitations under the License.
 
 """Image classification task definition."""
-from typing import Any, Optional, List, Tuple
+from typing import Any, List, Optional, Tuple
+
 from absl import logging
 import tensorflow as tf
 
@@ -23,6 +24,7 @@ from official.core import task_factory
 from official.modeling import tf_utils
 from official.vision.configs import image_classification as exp_cfg
 from official.vision.dataloaders import classification_input
+from official.vision.dataloaders import input_reader
 from official.vision.dataloaders import input_reader_factory
 from official.vision.dataloaders import tfds_factory
 from official.vision.modeling import factory
@@ -52,6 +54,10 @@ class ImageClassificationTask(base_task.Task):
 
     if self.task_config.freeze_backbone:
       model.backbone.trainable = False
+
+    # Builds the model
+    dummy_inputs = tf.keras.Input(self.task_config.model.input_size)
+    _ = model(dummy_inputs, training=False)
     return model
 
   def initialize(self, model: tf.keras.Model):
@@ -126,6 +132,7 @@ class ImageClassificationTask(base_task.Task):
         params,
         dataset_fn=dataset_fn.pick_dataset_fn(params.file_type),
         decoder_fn=decoder.decode,
+        combine_fn=input_reader.create_combine_fn(params),
         parser_fn=parser.parse_fn(params.is_training),
         postprocess_fn=postprocess_fn)
 
@@ -338,6 +345,9 @@ class ImageClassificationTask(base_task.Task):
     one_hot = self.task_config.losses.one_hot
     soft_labels = self.task_config.losses.soft_labels
     is_multilabel = self.task_config.train_data.is_multilabel
+    # Note: `soft_labels`` only apply to the training phrase. In the validation
+    # phrase, labels should still be integer ids and need to be converted to
+    # one hot format.
     if (one_hot or soft_labels) and not is_multilabel:
       labels = tf.one_hot(labels, self.task_config.model.num_classes)
 

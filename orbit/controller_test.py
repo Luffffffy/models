@@ -24,6 +24,7 @@ import numpy as np
 from orbit import controller
 from orbit import runner
 from orbit import standard_runner
+import orbit.utils
 
 import tensorflow as tf
 
@@ -646,7 +647,8 @@ class ControllerTest(tf.test.TestCase, parameterized.TestCase):
         evaluator=TestEvaluatorNoOutput(),
         global_step=tf.Variable(0, dtype=tf.int64),
         eval_summary_dir=os.path.join(self.model_dir, "summaries/eval"))
-    self.assertEqual(test_controller.evaluate(steps=5), {})
+    self.assertSameElements(["steps_per_second"],
+                            test_controller.evaluate(steps=5).keys())
 
   def test_train_and_evaluate_reset_datasets(self):
     test_runner = TestRunner()
@@ -698,12 +700,22 @@ class ControllerTest(tf.test.TestCase, parameterized.TestCase):
     self.assertLen(
         summaries_with_matching_keyword("eval_loss", self.model_dir), 2)
 
-  def test_evaluate_with_nested_summaries(self):
+  @parameterized.named_parameters(("DefaultSummary", False),
+                                  ("InjectSummary", True))
+  def test_evaluate_with_nested_summaries(self, inject_summary_manager):
     test_evaluator = TestEvaluatorWithNestedSummary()
+    if inject_summary_manager:
+      summary_manager = orbit.utils.SummaryManager(
+          self.model_dir,
+          tf.summary.scalar,
+          global_step=tf.Variable(0, dtype=tf.int64))
+    else:
+      summary_manager = None
     test_controller = controller.Controller(
         evaluator=test_evaluator,
         global_step=tf.Variable(0, dtype=tf.int64),
-        eval_summary_dir=self.model_dir)
+        eval_summary_dir=self.model_dir,
+        summary_manager=summary_manager)
     test_controller.evaluate(steps=5)
 
     self.assertNotEmpty(
@@ -769,6 +781,32 @@ class ControllerTest(tf.test.TestCase, parameterized.TestCase):
     for output in eval_output_recorder.outputs:
       self.assertIn("eval_loss", output)
       self.assertGreaterEqual(output["eval_loss"], 0)
+
+  def test_step_per_loop_callable(self):
+    test_runner = TestRunner()
+
+    checkpoint = tf.train.Checkpoint(
+        model=test_runner.model, optimizer=test_runner.optimizer)
+    checkpoint_manager = tf.train.CheckpointManager(
+        checkpoint,
+        self.model_dir,
+        max_to_keep=None,
+        step_counter=test_runner.global_step,
+        checkpoint_interval=10)
+
+    def steps_per_loop_fn(global_step):
+      if global_step > 4:
+        return 4
+      return 2
+
+    test_controller = controller.Controller(
+        trainer=test_runner,
+        global_step=test_runner.global_step,
+        steps_per_loop=steps_per_loop_fn,
+        checkpoint_manager=checkpoint_manager,
+    )
+    test_controller.train(steps=10)
+    self.assertEqual(test_runner.global_step, 10)
 
 
 if __name__ == "__main__":

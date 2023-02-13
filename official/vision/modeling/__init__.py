@@ -18,3 +18,4 @@ from official.vision.modeling import backbones
 from official.vision.modeling import decoders
 from official.vision.modeling import heads
 from official.vision.modeling import layers
+from official.vision.modeling import models

@@ -15,7 +15,7 @@
 """Semantic segmentation configuration definition."""
 import dataclasses
 import os
-from typing import List, Optional, Union
+from typing import List, Optional, Sequence, Union
 
 import numpy as np
 from official.core import config_definitions as cfg
@@ -26,15 +26,45 @@ from official.vision.configs import common
 from official.vision.configs import decoders
 from official.vision.configs import backbones
 
+# These values are from ImageNet dataset.
+_RGB_MEAN = [123.675, 116.28, 103.53]
+_RGB_STDDEV = [58.395, 57.12, 57.375]
+
+
+@dataclasses.dataclass
+class DenseFeatureConfig(hyperparams.Config):
+  """Config for dense features, such as RGB pixels, masks, heatmaps.
+
+  The dense features are encoded images in TF examples. Thus they are
+  1-, 3- or 4-channel. For features with another channel number (e.g.
+  optical flow), they could be encoded in multiple 1-channel features.
+  The default config is for RGB input, with mean and stddev from ImageNet
+  datasets. Only supports 8-bit encoded features with the maximum value = 255.
+
+  Attributes:
+    feature_name: The key of the feature in TF examples.
+    num_channels: An `int` specifying the number of channels of the feature.
+    mean: A list of floats in the range of [0, 255] representing the mean value
+      of each channel. The length of the list should match num_channels.
+    stddev: A list of floats in the range of [0, 255] representing the standard
+      deviation of each channel. The length should match num_channels.
+  """
+  feature_name: str = 'image/encoded'
+  num_channels: int = 3
+  mean: List[float] = dataclasses.field(default_factory=lambda: _RGB_MEAN)
+  stddev: List[float] = dataclasses.field(default_factory=lambda: _RGB_STDDEV)
+
 
 @dataclasses.dataclass
 class DataConfig(cfg.DataConfig):
   """Input config for training."""
+  image_feature: DenseFeatureConfig = DenseFeatureConfig()
   output_size: List[int] = dataclasses.field(default_factory=list)
   # If crop_size is specified, image will be resized first to
   # output_size, then crop of size crop_size will be cropped.
   crop_size: List[int] = dataclasses.field(default_factory=list)
-  input_path: str = ''
+  input_path: Union[Sequence[str], str, hyperparams.Config] = ''
+  weights: Optional[hyperparams.Config] = None
   global_batch_size: int = 0
   is_training: bool = True
   dtype: str = 'float32'
@@ -53,6 +83,8 @@ class DataConfig(cfg.DataConfig):
   drop_remainder: bool = True
   file_type: str = 'tfrecord'
   decoder: Optional[common.DataDecoder] = common.DataDecoder()
+  additional_dense_features: List[DenseFeatureConfig] = dataclasses.field(
+      default_factory=list)
 
 
 @dataclasses.dataclass
@@ -82,6 +114,7 @@ class MaskScoringHead(hyperparams.Config):
   fc_input_size: List[int] = dataclasses.field(default_factory=list)
   num_fcs: int = 2
   fc_dims: int = 1024
+  use_depthwise_convolution: bool = False
 
 
 @dataclasses.dataclass
@@ -101,23 +134,31 @@ class SemanticSegmentationModel(hyperparams.Config):
 
 @dataclasses.dataclass
 class Losses(hyperparams.Config):
+  """Loss function config."""
   loss_weight: float = 1.0
   label_smoothing: float = 0.0
   ignore_label: int = 255
+  gt_is_matting_map: bool = False
   class_weights: List[float] = dataclasses.field(default_factory=list)
   l2_weight_decay: float = 0.0
   use_groundtruth_dimension: bool = True
+  # If true, use binary cross entropy (sigmoid) in loss, otherwise, use
+  # categorical cross entropy (softmax).
+  use_binary_cross_entropy: bool = False
   top_k_percent_pixels: float = 1.0
+  mask_scoring_weight: float = 1.0
 
 
 @dataclasses.dataclass
 class Evaluation(hyperparams.Config):
+  """Evaluation config."""
   report_per_class_iou: bool = True
   report_train_mean_iou: bool = True  # Turning this off can speed up training.
 
 
 @dataclasses.dataclass
 class ExportConfig(hyperparams.Config):
+  """Model export config."""
   # Whether to rescale the predicted mask to the original image size.
   rescale_output: bool = False
 
@@ -132,8 +173,7 @@ class SemanticSegmentationTask(cfg.TaskConfig):
   evaluation: Evaluation = Evaluation()
   train_input_partition_dims: List[int] = dataclasses.field(
       default_factory=list)
-  eval_input_partition_dims: List[int] = dataclasses.field(
-      default_factory=list)
+  eval_input_partition_dims: List[int] = dataclasses.field(default_factory=list)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: Union[
       str, List[str]] = 'all'  # all, backbone, and/or decoder
@@ -150,6 +190,7 @@ def semantic_segmentation() -> cfg.ExperimentConfig:
           'task.train_data.is_training != None',
           'task.validation_data.is_training != None'
       ])
+
 
 # PASCAL VOC 2012 Dataset
 PASCAL_TRAIN_EXAMPLES = 10582
@@ -174,11 +215,15 @@ def seg_deeplabv3_pascal() -> cfg.ExperimentConfig:
               num_classes=21,
               input_size=[None, None, 3],
               backbone=backbones.Backbone(
-                  type='dilated_resnet', dilated_resnet=backbones.DilatedResNet(
-                      model_id=101, output_stride=output_stride,
-                      multigrid=multigrid, stem_type=stem_type)),
+                  type='dilated_resnet',
+                  dilated_resnet=backbones.DilatedResNet(
+                      model_id=101,
+                      output_stride=output_stride,
+                      multigrid=multigrid,
+                      stem_type=stem_type)),
               decoder=decoders.Decoder(
-                  type='aspp', aspp=decoders.ASPP(
+                  type='aspp',
+                  aspp=decoders.ASPP(
                       level=level, dilation_rates=aspp_dilation_rates)),
               head=SegmentationHead(level=level, num_convs=0),
               norm_activation=common.NormActivation(
@@ -262,9 +307,12 @@ def seg_deeplabv3plus_pascal() -> cfg.ExperimentConfig:
               num_classes=21,
               input_size=[None, None, 3],
               backbone=backbones.Backbone(
-                  type='dilated_resnet', dilated_resnet=backbones.DilatedResNet(
-                      model_id=101, output_stride=output_stride,
-                      stem_type=stem_type, multigrid=multigrid)),
+                  type='dilated_resnet',
+                  dilated_resnet=backbones.DilatedResNet(
+                      model_id=101,
+                      output_stride=output_stride,
+                      stem_type=stem_type,
+                      multigrid=multigrid)),
               decoder=decoders.Decoder(
                   type='aspp',
                   aspp=decoders.ASPP(
@@ -356,8 +404,7 @@ def seg_resnetfpn_pascal() -> cfg.ExperimentConfig:
               decoder=decoders.Decoder(type='fpn', fpn=decoders.FPN()),
               head=SegmentationHead(level=3, num_convs=3),
               norm_activation=common.NormActivation(
-                  activation='swish',
-                  use_sync_bn=True)),
+                  activation='swish', use_sync_bn=True)),
           losses=Losses(l2_weight_decay=1e-4),
           train_data=DataConfig(
               input_path=os.path.join(PASCAL_INPUT_PATH_BASE, 'train_aug*'),
@@ -530,13 +577,17 @@ def seg_deeplabv3plus_cityscapes() -> cfg.ExperimentConfig:
               num_classes=19,
               input_size=[None, None, 3],
               backbone=backbones.Backbone(
-                  type='dilated_resnet', dilated_resnet=backbones.DilatedResNet(
-                      model_id=101, output_stride=output_stride,
-                      stem_type=stem_type, multigrid=multigrid)),
+                  type='dilated_resnet',
+                  dilated_resnet=backbones.DilatedResNet(
+                      model_id=101,
+                      output_stride=output_stride,
+                      stem_type=stem_type,
+                      multigrid=multigrid)),
               decoder=decoders.Decoder(
                   type='aspp',
                   aspp=decoders.ASPP(
-                      level=level, dilation_rates=aspp_dilation_rates,
+                      level=level,
+                      dilation_rates=aspp_dilation_rates,
                       pool_kernel_size=[512, 1024])),
               head=SegmentationHead(
                   level=level,

@@ -89,7 +89,7 @@ class DataConfig(base_config.Config):
       tf.data pipeline. When using shared tf.data service, the tf.data dataset
       must be infinite, and slow trainer may skip certain training examples.
       More details about shared tf.data service can be found at:
-      https://www.tensorflow.org/api_docs/python/tf/data/experimental/service?version=nightly#sharing_tfdata_service_with_concurrent_trainers.
+      https://www.tensorflow.org/api_docs/python/tf/data/experimental/service#sharing_tfdata_service_with_concurrent_trainers.
     apply_tf_data_service_before_batching: A bool. If set to True, tf.data
       service will be applied before batching operation. This is useful to make
       sure only a single tf.data service instance is created when
@@ -106,10 +106,10 @@ class DataConfig(base_config.Config):
       high.
   """
   input_path: Union[Sequence[str], str, base_config.Config] = ""
-  tfds_name: str = ""
+  tfds_name: Union[str, base_config.Config] = ""
   tfds_split: str = ""
   global_batch_size: int = 0
-  is_training: bool = None
+  is_training: Optional[bool] = None
   drop_remainder: bool = True
   shuffle_buffer_size: int = 100
   cache: bool = False
@@ -282,6 +282,7 @@ class TaskConfig(base_config.Config):
   # Configs for differential privacy
   # These configs are only effective if you use create_optimizer in
   # tensorflow_models/official/core/base_task.py
+  # DEPRECATED b/264611883
   differential_privacy_config: Optional[
       dp_configs.DifferentialPrivacyConfig] = None
 

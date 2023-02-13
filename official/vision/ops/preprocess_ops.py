@@ -15,7 +15,7 @@
 """Preprocessing ops."""
 
 import math
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Sequence, Union
 from six.moves import range
 import tensorflow as tf
 
@@ -23,6 +23,12 @@ from official.vision.ops import augment
 from official.vision.ops import box_ops
 
 CENTER_CROP_FRACTION = 0.875
+
+# Calculated from the ImageNet training set
+MEAN_NORM = (0.485, 0.456, 0.406)
+STDDEV_NORM = (0.229, 0.224, 0.225)
+MEAN_RGB = tuple(255 * i for i in MEAN_NORM)
+STDDEV_RGB = tuple(255 * i for i in STDDEV_NORM)
 
 # Alias for convenience. PLEASE use `box_ops.horizontal_flip_boxes` directly.
 horizontal_flip_boxes = box_ops.horizontal_flip_boxes
@@ -65,22 +71,40 @@ def clip_or_pad_to_fixed_size(input_tensor, size, constant_values=0):
   return padded_tensor
 
 
-def normalize_image(image,
-                    offset=(0.485, 0.456, 0.406),
-                    scale=(0.229, 0.224, 0.225)):
+def normalize_image(image: tf.Tensor,
+                    offset: Sequence[float] = MEAN_NORM,
+                    scale: Sequence[float] = STDDEV_NORM):
   """Normalizes the image to zero mean and unit variance."""
   with tf.name_scope('normalize_image'):
     image = tf.image.convert_image_dtype(image, dtype=tf.float32)
-    offset = tf.constant(offset)
-    offset = tf.expand_dims(offset, axis=0)
-    offset = tf.expand_dims(offset, axis=0)
-    image -= offset
+    return normalize_scaled_float_image(image, offset, scale)
 
-    scale = tf.constant(scale)
-    scale = tf.expand_dims(scale, axis=0)
-    scale = tf.expand_dims(scale, axis=0)
-    image /= scale
-    return image
+
+def normalize_scaled_float_image(image: tf.Tensor,
+                                 offset: Sequence[float] = MEAN_NORM,
+                                 scale: Sequence[float] = STDDEV_NORM):
+  """Normalizes a scaled float image to zero mean and unit variance.
+
+  It assumes the input image is float dtype with values in [0, 1).
+
+  Args:
+    image: A tf.Tensor in float32 dtype with values in range [0, 1).
+    offset: A tuple of mean values to be subtracted from the image.
+    scale: A tuple of normalization factors.
+
+  Returns:
+    A normalized image tensor.
+  """
+  offset = tf.constant(offset)
+  offset = tf.expand_dims(offset, axis=0)
+  offset = tf.expand_dims(offset, axis=0)
+  image -= offset
+
+  scale = tf.constant(scale)
+  scale = tf.expand_dims(scale, axis=0)
+  scale = tf.expand_dims(scale, axis=0)
+  image /= scale
+  return image
 
 
 def compute_padded_size(desired_size, stride):
@@ -220,8 +244,10 @@ def resize_and_crop_image_v2(image,
   1. For a given image, keep its aspect ratio and first try to rescale the short
      side of the original image to `short_side`.
   2. If the scaled image after 1 has a long side that exceeds `long_side`, keep
-     the aspect ratio and rescal the long side of the image to `long_side`.
-  2. Pad the rescaled image to the padded_size.
+     the aspect ratio and rescale the long side of the image to `long_side`.
+  3. (Optional) Apply random jittering according to `aug_scale_min` and
+    `aug_scale_max`. By default this step is skipped.
+  4. Pad the rescaled image to the padded_size.
 
   Args:
     image: a `Tensor` of shape [height, width, 3] representing an image.
@@ -230,12 +256,11 @@ def resize_and_crop_image_v2(image,
     long_side: a scalar `Tensor` or `int` representing the desired long side to
       be rescaled to.
     padded_size: a `Tensor` or `int` list/tuple of two elements representing
-      [height, width] of the padded output image size. Padding will be applied
-      after scaling the image to the desired_size.
+      [height, width] of the padded output image size.
     aug_scale_min: a `float` with range between [0, 1.0] representing minimum
-      random scale applied to desired_size for training scale jittering.
+      random scale applied for training scale jittering.
     aug_scale_max: a `float` with range between [1.0, inf] representing maximum
-      random scale applied to desired_size for training scale jittering.
+      random scale applied for training scale jittering.
     seed: seed for random scale jittering.
     method: function to resize input image to scaled image.
 
@@ -555,14 +580,11 @@ def resize_and_crop_boxes(boxes,
     return boxes
 
 
-def resize_and_crop_masks(masks,
-                          image_scale,
-                          output_size,
-                          offset):
+def resize_and_crop_masks(masks, image_scale, output_size, offset):
   """Resizes boxes to output size with scale and offset.
 
   Args:
-    masks: `Tensor` of shape [N, H, W, 1] representing ground truth masks.
+    masks: `Tensor` of shape [N, H, W, C] representing ground truth masks.
     image_scale: 2D float `Tensor` representing scale factors that apply to
       [height, width] of input image.
     output_size: 2D `Tensor` or `int` representing [height, width] of target
@@ -571,13 +593,17 @@ def resize_and_crop_masks(masks,
       boxes.
 
   Returns:
-    masks: `Tensor` of shape [N, H, W, 1] representing the scaled masks.
+    masks: `Tensor` of shape [N, H, W, C] representing the scaled masks.
   """
   with tf.name_scope('resize_and_crop_masks'):
     mask_size = tf.cast(tf.shape(masks)[1:3], tf.float32)
+    num_channels = tf.shape(masks)[3]
     # Pad masks to avoid empty mask annotations.
-    masks = tf.concat(
-        [tf.zeros([1, mask_size[0], mask_size[1], 1]), masks], axis=0)
+    masks = tf.concat([
+        tf.zeros([1, mask_size[0], mask_size[1], num_channels],
+                 dtype=masks.dtype), masks
+    ],
+                      axis=0)
 
     scaled_size = tf.cast(image_scale * mask_size, tf.int32)
     scaled_masks = tf.image.resize(

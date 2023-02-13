@@ -11,7 +11,6 @@ tensorflow-hub>=0.6.0
 tensorflow-model-optimization>=0.4.1
 tensorflow-datasets
 tensorflow-addons
-dataclasses;python_version<"3.7"
 gin-config
 tf_slim>=1.1.0
 Cython
@@ -19,7 +18,7 @@ matplotlib
 # Loader becomes a required positional argument in 6.0 in yaml.load
 pyyaml>=5.1,<6.0
 # CV related dependencies
-opencv-python-headless==4.5.2.52
+opencv-python-headless
 Pillow
 pycocotools
 # NLP related dependencies

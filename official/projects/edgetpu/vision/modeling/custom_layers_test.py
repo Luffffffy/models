@@ -184,7 +184,3 @@ class ArgmaxTest(parameterized.TestCase, tf.test.TestCase):
       test_output = custom_layers.argmax(
           random_inputs, axis=axis, output_type=output_type)
       self.assertAllEqual(control_output, test_output)
-
-
-if __name__ == '__main__':
-  tf.test.main()

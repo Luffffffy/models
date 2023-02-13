@@ -14,6 +14,7 @@
 
 """Activations package definition."""
 from official.modeling.activations.gelu import gelu
+from official.modeling.activations.mish import mish
 from official.modeling.activations.relu import relu6
 from official.modeling.activations.sigmoid import hard_sigmoid
 from official.modeling.activations.swish import hard_swish

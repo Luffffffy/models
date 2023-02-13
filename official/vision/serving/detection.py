@@ -14,7 +14,7 @@
 
 """Detection input and model functions for serving/inference."""
 
-from typing import Mapping, Text
+from typing import Mapping, Tuple
 
 from absl import logging
 import tensorflow as tf
@@ -27,21 +27,18 @@ from official.vision.ops import preprocess_ops
 from official.vision.serving import export_base
 
 
-MEAN_RGB = (0.485 * 255, 0.456 * 255, 0.406 * 255)
-STDDEV_RGB = (0.229 * 255, 0.224 * 255, 0.225 * 255)
-
-
 class DetectionModule(export_base.ExportModule):
   """Detection Module."""
 
   def _build_model(self):
 
-    if self._batch_size is None:
-      # Only batched NMS is supported with dynamic batch size.
+    nms_versions_supporting_dynamic_batch_size = {'batched', 'v2', 'v3'}
+    nms_version = self.params.task.model.detection_generator.nms_version
+    if (self._batch_size is None and
+        nms_version not in nms_versions_supporting_dynamic_batch_size):
+      logging.info('nms_version is set to `batched` because `%s` '
+                   'does not support with dynamic batch size.', nms_version)
       self.params.task.model.detection_generator.nms_version = 'batched'
-      logging.info(
-          'nms_version is set to `batched` because only batched NMS is '
-          'supported with dynamic batch size.')
 
     input_specs = tf.keras.layers.InputSpec(shape=[self._batch_size] +
                                             self._input_image_size + [3])
@@ -74,9 +71,8 @@ class DetectionModule(export_base.ExportModule):
     """Builds detection model inputs for serving."""
     model_params = self.params.task.model
     # Normalizes image with mean and std pixel values.
-    image = preprocess_ops.normalize_image(image,
-                                           offset=MEAN_RGB,
-                                           scale=STDDEV_RGB)
+    image = preprocess_ops.normalize_image(
+        image, offset=preprocess_ops.MEAN_RGB, scale=preprocess_ops.STDDEV_RGB)
 
     image, image_info = preprocess_ops.resize_and_crop_image(
         image,
@@ -89,9 +85,10 @@ class DetectionModule(export_base.ExportModule):
 
     return image, anchor_boxes, image_info
 
-  def preprocess(self, images: tf.Tensor) -> (
-      tf.Tensor, Mapping[Text, tf.Tensor], tf.Tensor):
-    """Preprocess inputs to be suitable for the model.
+  def preprocess(
+      self, images: tf.Tensor
+  ) -> Tuple[tf.Tensor, Mapping[str, tf.Tensor], tf.Tensor]:
+    """Preprocesses inputs to be suitable for the model.
 
     Args:
       images: The images tensor.
@@ -135,7 +132,7 @@ class DetectionModule(export_base.ExportModule):
       return images, anchor_boxes, image_info
 
   def serve(self, images: tf.Tensor):
-    """Cast image to float and run inference.
+    """Casts image to float and runs inference.
 
     Args:
       images: uint8 Tensor of shape [batch_size, None, None, 3]
@@ -177,11 +174,13 @@ class DetectionModule(export_base.ExportModule):
         export_config = self.params.task.export_config
         # Normalize detection box coordinates to [0, 1].
         if export_config.output_normalized_coordinates:
-          detection_boxes = (
-              detections['detection_boxes'] /
-              tf.tile(image_info[:, 2:3, :], [1, 1, 2]))
-          detections['detection_boxes'] = box_ops.normalize_boxes(
-              detection_boxes, image_info[:, 0:1, :])
+          for key in ['detection_boxes', 'detection_outer_boxes']:
+            if key not in detections:
+              continue
+            detection_boxes = (
+                detections[key] / tf.tile(image_info[:, 2:3, :], [1, 1, 2]))
+            detections[key] = box_ops.normalize_boxes(
+                detection_boxes, image_info[:, 0:1, :])
 
         # Cast num_detections and detection_classes to float. This allows the
         # model inference to work on chain (go/chain) as chain requires floating
@@ -199,6 +198,9 @@ class DetectionModule(export_base.ExportModule):
           'detection_classes': detections['detection_classes'],
           'num_detections': detections['num_detections']
       }
+      if 'detection_outer_boxes' in detections:
+        final_outputs['detection_outer_boxes'] = (
+            detections['detection_outer_boxes'])
     else:
       final_outputs = {
           'decoded_boxes': detections['decoded_boxes'],

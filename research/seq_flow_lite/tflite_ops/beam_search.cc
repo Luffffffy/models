@@ -13,18 +13,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "third_party/tensorflow_models/seq_flow_lite/tflite_ops/beam_search.h"
+#include "tflite_ops/beam_search.h"  // seq_flow_lite
 
 #include <algorithm>
 #include <cstdint>
 #include <numeric>
 #include <vector>
 
-#include "base/logging.h"
-#include "third_party/absl/strings/str_join.h"
-#include "third_party/tensorflow/lite/kernels/internal/tensor_ctypes.h"
-#include "third_party/tensorflow/lite/kernels/internal/types.h"
-#include "third_party/tensorflow_models/seq_flow_lite/tflite_ops/quantization_util.h"
+#include <glog/logging.h>
+#include "absl/strings/str_join.h"
+#include "tensorflow/lite/kernels/internal/tensor_ctypes.h"
+#include "tensorflow/lite/kernels/internal/types.h"
+#include "tflite_ops/quantization_util.h"  // seq_flow_lite
 
 namespace seq_flow_lite {
 namespace ops {
@@ -86,6 +86,7 @@ void SequenceTracker::AddSequence(const int32_t *begin, const int32_t *end,
 
 std::vector<std::vector<int32_t>> SequenceTracker::GetTopBeams() {
   std::vector<std::vector<int32_t>> return_value;
+  return_value.reserve(terminated_topk_.size());
   for (const auto &v : terminated_topk_) {
     return_value.push_back(v.second);
   }
@@ -96,7 +97,7 @@ void BeamSearch::PopulateLogLookupTable(const TfLiteTensor &tensor) {
   if (!log_lookup_table_populated_) {
     for (int value = 0; value < 256; ++value) {
       log_lookup_table_[value] =
-          logf(::seq_flow_lite::PodDequantizeValue(tensor, value));
+          logf(::seq_flow_lite::PodDequantizeValue<uint8_t>(tensor, value));
     }
     log_lookup_table_populated_ = true;
   }
@@ -113,7 +114,7 @@ void BeamSearch::PopulateSoftmaxLookupTable(const TfLiteTensor &tensor) {
 }
 
 float BeamSearch::InverseLengthPenalty(int step) {
-  return 1.0f / std::powf((5.f + step) / 6.f, alpha_);
+  return 1.0f / std::pow((5.f + step) / 6.f, alpha_);
 }
 
 void BeamSearch::FindTopKFloat(const TfLiteTensor &tensor, int valid_beams,
@@ -255,8 +256,8 @@ void BeamSearch::FindTopKQuantizedFromLogitsV1(const TfLiteTensor &tensor,
       }
     }
     // Updating topk across all beams.
-    for (uint32_t k = 0; k < std::min(topk_k, num_classes_); ++k) {
-      const uint32_t curr_beam_index = curr_beam_topk[k] & kClassIndexMask;
+    for (uint32_t curr_beam : curr_beam_topk) {
+      const uint32_t curr_beam_index = curr_beam & kClassIndexMask;
       const uint32_t index = j * num_classes_ + curr_beam_index;
       const float log_prob =
           tensor.params.scale * beam_logits[curr_beam_index] - precomputed;

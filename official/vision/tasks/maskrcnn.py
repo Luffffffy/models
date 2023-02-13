@@ -15,14 +15,16 @@
 """MaskRCNN task definition."""
 
 import os
-from typing import Any, Dict, Optional, List, Tuple, Mapping
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from absl import logging
 import tensorflow as tf
+
 from official.common import dataset_fn as dataset_fn_lib
 from official.core import base_task
 from official.core import task_factory
 from official.vision.configs import maskrcnn as exp_cfg
+from official.vision.dataloaders import input_reader
 from official.vision.dataloaders import input_reader_factory
 from official.vision.dataloaders import maskrcnn_input
 from official.vision.dataloaders import tf_example_decoder
@@ -35,7 +37,7 @@ from official.vision.modeling import factory
 
 def zero_out_disallowed_class_ids(batch_class_ids: tf.Tensor,
                                   allowed_class_ids: List[int]):
-  """Zero out IDs of classes not in allowed_class_ids.
+  """Zeroes out IDs of classes not in allowed_class_ids.
 
   Args:
     batch_class_ids: A [batch_size, num_instances] int tensor of input
@@ -67,7 +69,7 @@ class MaskRCNNTask(base_task.Task):
   """
 
   def build_model(self):
-    """Build Mask R-CNN model."""
+    """Builds Mask R-CNN model."""
 
     input_specs = tf.keras.layers.InputSpec(
         shape=[None] + self.task_config.model.input_size)
@@ -90,7 +92,7 @@ class MaskRCNNTask(base_task.Task):
     return model
 
   def initialize(self, model: tf.keras.Model):
-    """Loading pretrained checkpoint."""
+    """Loads pretrained checkpoint."""
 
     if not self.task_config.init_checkpoint:
       return
@@ -124,7 +126,7 @@ class MaskRCNNTask(base_task.Task):
       input_context: Optional[tf.distribute.InputContext] = None,
       dataset_fn: Optional[dataset_fn_lib.PossibleDatasetType] = None
   ) -> tf.data.Dataset:
-    """Build input dataset."""
+    """Builds input dataset."""
     decoder_cfg = params.decoder.get()
     if params.decoder.type == 'simple_decoder':
       decoder = tf_example_decoder.TfExampleDecoder(
@@ -155,9 +157,11 @@ class MaskRCNNTask(base_task.Task):
         aug_rand_hflip=params.parser.aug_rand_hflip,
         aug_scale_min=params.parser.aug_scale_min,
         aug_scale_max=params.parser.aug_scale_max,
+        aug_type=params.parser.aug_type,
         skip_crowd_during_training=params.parser.skip_crowd_during_training,
         max_num_instances=params.parser.max_num_instances,
-        include_mask=self._task_config.model.include_mask,
+        include_mask=self.task_config.model.include_mask,
+        outer_boxes_scale=self.task_config.model.outer_boxes_scale,
         mask_crop_size=params.parser.mask_crop_size)
 
     if not dataset_fn:
@@ -167,6 +171,7 @@ class MaskRCNNTask(base_task.Task):
         params,
         dataset_fn=dataset_fn,
         decoder_fn=decoder.decode,
+        combine_fn=input_reader.create_combine_fn(params),
         parser_fn=parser.parse_fn(params.is_training))
     dataset = reader.read(input_context=input_context)
 
@@ -175,7 +180,7 @@ class MaskRCNNTask(base_task.Task):
   def _build_rpn_losses(
       self, outputs: Mapping[str, Any],
       labels: Mapping[str, Any]) -> Tuple[tf.Tensor, tf.Tensor]:
-    """Build losses for Region Proposal Network (RPN)."""
+    """Builds losses for Region Proposal Network (RPN)."""
     rpn_score_loss_fn = maskrcnn_losses.RpnScoreLoss(
         tf.shape(outputs['box_outputs'])[1])
     rpn_box_loss_fn = maskrcnn_losses.RpnBoxLoss(
@@ -189,10 +194,13 @@ class MaskRCNNTask(base_task.Task):
   def _build_frcnn_losses(
       self, outputs: Mapping[str, Any],
       labels: Mapping[str, Any]) -> Tuple[tf.Tensor, tf.Tensor]:
-    """Build losses for Fast R-CNN."""
+    """Builds losses for Fast R-CNN."""
     cascade_ious = self.task_config.model.roi_sampler.cascade_iou_thresholds
 
-    frcnn_cls_loss_fn = maskrcnn_losses.FastrcnnClassLoss()
+    frcnn_cls_loss_fn = maskrcnn_losses.FastrcnnClassLoss(
+        use_binary_cross_entropy=self.task_config.losses
+        .frcnn_class_use_binary_cross_entropy,
+        top_k_percent=self.task_config.losses.frcnn_class_loss_top_k_percent)
     frcnn_box_loss_fn = maskrcnn_losses.FastrcnnBoxLoss(
         self.task_config.losses.frcnn_huber_loss_delta,
         self.task_config.model.detection_head.class_agnostic_bbox_pred)
@@ -223,7 +231,7 @@ class MaskRCNNTask(base_task.Task):
     return frcnn_cls_loss, frcnn_box_loss
 
   def _build_mask_loss(self, outputs: Mapping[str, Any]) -> tf.Tensor:
-    """Build losses for the masks."""
+    """Builds losses for the masks."""
     mask_loss_fn = maskrcnn_losses.MaskrcnnLoss()
     mask_class_targets = outputs['mask_class_targets']
     if self.task_config.allowed_mask_class_ids is not None:
@@ -238,7 +246,7 @@ class MaskRCNNTask(base_task.Task):
                    outputs: Mapping[str, Any],
                    labels: Mapping[str, Any],
                    aux_losses: Optional[Any] = None) -> Dict[str, tf.Tensor]:
-    """Build Mask R-CNN losses."""
+    """Builds Mask R-CNN losses."""
     rpn_score_loss, rpn_box_loss = self._build_rpn_losses(outputs, labels)
     frcnn_cls_loss, frcnn_box_loss = self._build_frcnn_losses(outputs, labels)
     if self.task_config.model.include_mask:
@@ -272,7 +280,7 @@ class MaskRCNNTask(base_task.Task):
     return losses
 
   def _build_coco_metrics(self):
-    """Build COCO metrics evaluator."""
+    """Builds COCO metrics evaluator."""
     if (not self._task_config.model.include_mask
        ) or self._task_config.annotation_file:
       self.coco_metric = coco_evaluator.COCOEvaluator(
@@ -307,7 +315,7 @@ class MaskRCNNTask(base_task.Task):
           per_category_metrics=self._task_config.per_category_metrics)
 
   def build_metrics(self, training: bool = True):
-    """Build detection metrics."""
+    """Builds detection metrics."""
     metrics = []
     if training:
       metric_names = [
@@ -361,15 +369,19 @@ class MaskRCNNTask(base_task.Task):
     images, labels = inputs
     num_replicas = tf.distribute.get_strategy().num_replicas_in_sync
     with tf.GradientTape() as tape:
+      model_kwargs = {
+          'image_shape': labels['image_info'][:, 1, :],
+          'anchor_boxes': labels['anchor_boxes'],
+          'gt_boxes': labels['gt_boxes'],
+          'gt_classes': labels['gt_classes'],
+          'training': True,
+      }
+      if self.task_config.model.include_mask:
+        model_kwargs['gt_masks'] = labels['gt_masks']
+        if self.task_config.model.outer_boxes_scale > 1.0:
+          model_kwargs['gt_outer_boxes'] = labels['gt_outer_boxes']
       outputs = model(
-          images,
-          image_shape=labels['image_info'][:, 1, :],
-          anchor_boxes=labels['anchor_boxes'],
-          gt_boxes=labels['gt_boxes'],
-          gt_classes=labels['gt_classes'],
-          gt_masks=(labels['gt_masks'] if self.task_config.model.include_mask
-                    else None),
-          training=True)
+          images, **model_kwargs)
       outputs = tf.nest.map_structure(
           lambda x: tf.cast(x, tf.float32), outputs)
 
@@ -431,9 +443,10 @@ class MaskRCNNTask(base_task.Task):
           'image_info': labels['image_info']
       }
       if self.task_config.model.include_mask:
-        coco_model_outputs.update({
-            'detection_masks': outputs['detection_masks'],
-        })
+        if 'detection_outer_boxes' in outputs:
+          coco_model_outputs['detection_outer_boxes'] = (
+              outputs['detection_outer_boxes'])
+        coco_model_outputs['detection_masks'] = outputs['detection_masks']
       logs.update(
           {self.coco_metric.name: (labels['groundtruths'], coco_model_outputs)})
 

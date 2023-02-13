@@ -22,7 +22,6 @@ import tensorflow as tf
 from official.modeling import tf_utils
 from official.nlp.modeling import layers
 
-
 _Initializer = Union[str, tf.keras.initializers.Initializer]
 _Activation = Union[str, Callable[..., Any]]
 
@@ -75,6 +74,10 @@ class BertEncoderV2(tf.keras.layers.Layer):
       layers. If set False, output of attention and intermediate dense layers is
       normalized.
     with_dense_inputs: Whether to accept dense embeddings as the input.
+    return_attention_scores: Whether to add an additional output containing the
+      attention scores of all transformer layers. This will be a list of length
+      `num_layers`, and each element will be in the shape [batch_size,
+      num_attention_heads, seq_dim, seq_dim].
   """
 
   def __init__(
@@ -96,6 +99,7 @@ class BertEncoderV2(tf.keras.layers.Layer):
       embedding_layer: Optional[tf.keras.layers.Layer] = None,
       norm_first: bool = False,
       with_dense_inputs: bool = False,
+      return_attention_scores: bool = False,
       **kwargs):
     # Pops kwargs that are used in V1 implementation.
     if 'dict_outputs' in kwargs:
@@ -111,6 +115,8 @@ class BertEncoderV2(tf.keras.layers.Layer):
     if 'attention_dropout_rate' in kwargs:
       attention_dropout = kwargs.pop('attention_dropout_rate')
     super().__init__(**kwargs)
+
+    self._output_range = output_range
 
     activation = tf.keras.activations.get(inner_activation)
     initializer = tf.keras.initializers.get(initializer)
@@ -159,6 +165,7 @@ class BertEncoderV2(tf.keras.layers.Layer):
     self._transformer_layers = []
     self._attention_mask_layer = layers.SelfAttentionMask(
         name='self_attention_mask')
+    self._num_layers = num_layers
     for i in range(num_layers):
       layer = layers.TransformerEncoderBlock(
           num_attention_heads=num_attention_heads,
@@ -167,7 +174,7 @@ class BertEncoderV2(tf.keras.layers.Layer):
           output_dropout=output_dropout,
           attention_dropout=attention_dropout,
           norm_first=norm_first,
-          output_range=output_range if i == num_layers - 1 else None,
+          return_attention_scores=return_attention_scores,
           kernel_initializer=tf_utils.clone_initializer(initializer),
           name='transformer/layer_%d' % i)
       self._transformer_layers.append(layer)
@@ -195,6 +202,7 @@ class BertEncoderV2(tf.keras.layers.Layer):
         'embedding_layer': embedding_layer,
         'norm_first': norm_first,
         'with_dense_inputs': with_dense_inputs,
+        'return_attention_scores': return_attention_scores,
     }
     if with_dense_inputs:
       self.inputs = dict(
@@ -230,16 +238,10 @@ class BertEncoderV2(tf.keras.layers.Layer):
       word_embeddings = self._embedding_layer(word_ids)
 
     if dense_inputs is not None:
-      # Concat the dense embeddings at sequence end.
-      word_embeddings = tf.concat([word_embeddings, dense_inputs], axis=1)
-      type_ids = tf.concat([type_ids, dense_type_ids], axis=1)
       mask = tf.concat([mask, dense_mask], axis=1)
 
-    # absolute position embeddings.
-    position_embeddings = self._position_embedding_layer(word_embeddings)
-    type_embeddings = self._type_embedding_layer(type_ids)
-
-    embeddings = word_embeddings + position_embeddings + type_embeddings
+    embeddings = self._get_embeddings(word_ids, type_ids, word_embeddings,
+                                      dense_inputs, dense_type_ids)
     embeddings = self._embedding_norm_layer(embeddings)
     embeddings = self._embedding_dropout(embeddings)
 
@@ -249,19 +251,29 @@ class BertEncoderV2(tf.keras.layers.Layer):
     attention_mask = self._attention_mask_layer(embeddings, mask)
 
     encoder_outputs = []
+    attention_outputs = []
     x = embeddings
-    for layer in self._transformer_layers:
-      x = layer([x, attention_mask])
+    for i, layer in enumerate(self._transformer_layers):
+      transformer_output_range = None
+      if i == self._num_layers - 1:
+        transformer_output_range = self._output_range
+      x = layer([x, attention_mask], output_range=transformer_output_range)
+      if self._config['return_attention_scores']:
+        x, attention_scores = x
+        attention_outputs.append(attention_scores)
       encoder_outputs.append(x)
 
     last_encoder_output = encoder_outputs[-1]
     first_token_tensor = last_encoder_output[:, 0, :]
     pooled_output = self._pooler_layer(first_token_tensor)
 
-    return dict(
+    output = dict(
         sequence_output=encoder_outputs[-1],
         pooled_output=pooled_output,
         encoder_outputs=encoder_outputs)
+    if self._config['return_attention_scores']:
+      output['attention_scores'] = attention_outputs
+    return output
 
   def get_embedding_table(self):
     return self._embedding_layer.embeddings
@@ -295,6 +307,24 @@ class BertEncoderV2(tf.keras.layers.Layer):
 
     return cls(**config)
 
+  def _get_embeddings(self, word_ids: tf.Tensor, type_ids: tf.Tensor,
+                      word_embeddings: Optional[tf.Tensor],
+                      dense_inputs: Optional[tf.Tensor],
+                      dense_type_ids: Optional[tf.Tensor]) -> tf.Tensor:
+    if word_embeddings is None:
+      word_embeddings = self._embedding_layer(word_ids)
+
+    if dense_inputs is not None:
+      # Concat the dense embeddings at sequence end.
+      word_embeddings = tf.concat([word_embeddings, dense_inputs], axis=1)
+      type_ids = tf.concat([type_ids, dense_type_ids], axis=1)
+
+    type_embeddings = self._type_embedding_layer(type_ids)
+
+    # absolute position embeddings.
+    position_embeddings = self._position_embedding_layer(word_embeddings)
+    return word_embeddings + position_embeddings + type_embeddings
+
 
 @tf.keras.utils.register_keras_serializable(package='Text')
 class BertEncoder(tf.keras.Model):
@@ -324,13 +354,13 @@ class BertEncoder(tf.keras.Model):
       This determines the variable shape for positional embeddings.
     type_vocab_size: The number of types that the 'type_ids' input can take.
     inner_dim: The output dimension of the first Dense layer in a two-layer
-        feedforward network for each transformer.
+      feedforward network for each transformer.
     inner_activation: The activation for the first Dense layer in a two-layer
-        feedforward network for each transformer.
+      feedforward network for each transformer.
     output_dropout: Dropout probability for the post-attention and output
-        dropout.
-    attention_dropout: The dropout rate to use for the attention layers
-      within the transformer layers.
+      dropout.
+    attention_dropout: The dropout rate to use for the attention layers within
+      the transformer layers.
     initializer: The initialzer to use for all weights in this encoder.
     output_range: The sequence output range, [0, output_range), by slicing the
       target sequence of the last transformer layer. `None` means the entire
@@ -341,16 +371,20 @@ class BertEncoder(tf.keras.Model):
       matrices in the shape of ['vocab_size', 'embedding_width'] and
       ['embedding_width', 'hidden_size'] ('embedding_width' is usually much
       smaller than 'hidden_size').
-    embedding_layer: An optional Layer instance which will be called to
-     generate embeddings for the input word IDs.
-    norm_first: Whether to normalize inputs to attention and intermediate
-      dense layers. If set False, output of attention and intermediate dense
-      layers is normalized.
+    embedding_layer: An optional Layer instance which will be called to generate
+      embeddings for the input word IDs.
+    norm_first: Whether to normalize inputs to attention and intermediate dense
+      layers. If set False, output of attention and intermediate dense layers is
+      normalized.
     dict_outputs: Whether to use a dictionary as the model outputs.
     return_all_encoder_outputs: Whether to output sequence embedding outputs of
       all encoder transformer layers. Note: when the following `dict_outputs`
       argument is True, all encoder outputs are always returned in the dict,
       keyed by `encoder_outputs`.
+    return_attention_scores: Whether to add an additional output containing the
+      attention scores of all transformer layers. This will be a list of length
+      `num_layers`, and each element will be in the shape [batch_size,
+      num_attention_heads, seq_dim, seq_dim].
   """
 
   def __init__(
@@ -372,6 +406,7 @@ class BertEncoder(tf.keras.Model):
       norm_first=False,
       dict_outputs=False,
       return_all_encoder_outputs=False,
+      return_attention_scores: bool = False,
       **kwargs):
     if 'sequence_length' in kwargs:
       kwargs.pop('sequence_length')
@@ -455,11 +490,11 @@ class BertEncoder(tf.keras.Model):
     data = embeddings
     attention_mask = layers.SelfAttentionMask()(data, mask)
     encoder_outputs = []
+    attention_outputs = []
     for i in range(num_layers):
-      if i == num_layers - 1 and output_range is not None:
+      transformer_output_range = None
+      if i == num_layers - 1:
         transformer_output_range = output_range
-      else:
-        transformer_output_range = None
       layer = layers.TransformerEncoderBlock(
           num_attention_heads=num_attention_heads,
           inner_dim=inner_dim,
@@ -467,11 +502,15 @@ class BertEncoder(tf.keras.Model):
           output_dropout=output_dropout,
           attention_dropout=attention_dropout,
           norm_first=norm_first,
-          output_range=transformer_output_range,
+          return_attention_scores=return_attention_scores,
           kernel_initializer=tf_utils.clone_initializer(initializer),
           name='transformer/layer_%d' % i)
       transformer_layers.append(layer)
-      data = layer([data, attention_mask])
+      data = layer([data, attention_mask],
+                   output_range=transformer_output_range)
+      if return_attention_scores:
+        data, attention_scores = data
+        attention_outputs.append(attention_scores)
       encoder_outputs.append(data)
 
     last_encoder_output = encoder_outputs[-1]
@@ -491,6 +530,8 @@ class BertEncoder(tf.keras.Model):
         pooled_output=cls_output,
         encoder_outputs=encoder_outputs,
     )
+    if return_attention_scores:
+      outputs['attention_scores'] = attention_outputs
 
     if dict_outputs:
       super().__init__(
@@ -503,6 +544,8 @@ class BertEncoder(tf.keras.Model):
       else:
         sequence_output = outputs['sequence_output']
         outputs = [sequence_output, cls_output]
+      if return_attention_scores:
+        outputs.append(attention_outputs)
       super().__init__(  # pylint: disable=bad-super-call
           inputs=[word_ids, mask, type_ids],
           outputs=outputs,
@@ -534,6 +577,7 @@ class BertEncoder(tf.keras.Model):
         'embedding_layer': embedding_layer,
         'norm_first': norm_first,
         'dict_outputs': dict_outputs,
+        'return_attention_scores': return_attention_scores,
     }
     # pylint: disable=protected-access
     self._setattr_tracking = False
@@ -572,3 +616,4 @@ class BertEncoder(tf.keras.Model):
       logging.warn(warn_string)
 
     return cls(**config)
+

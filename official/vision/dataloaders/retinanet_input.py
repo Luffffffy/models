@@ -14,7 +14,7 @@
 
 """Data parser and processing for RetinaNet.
 
-Parse image and ground truths in a dataset to training targets and package them
+Parse image and ground-truths in a dataset to training targets and package them
 into (image, labels) tuple for RetinaNet.
 """
 
@@ -62,7 +62,7 @@ class Parser(parser.Parser):
       num_scales: `int` number representing intermediate scales added on each
         level. For instances, num_scales=2 adds one additional intermediate
         anchor scales [2^0, 2^0.5] on each level.
-      aspect_ratios: `list` of float numbers representing the aspect raito
+      aspect_ratios: `list` of float numbers representing the aspect ratio
         anchors added on each level. The number indicates the ratio of width to
         height. For instances, aspect_ratios=[1.0, 2.0, 0.5] adds three anchors
         on each scale level.
@@ -92,7 +92,7 @@ class Parser(parser.Parser):
         image. The groundtruth data will be padded to `max_num_instances`.
       dtype: `str`, data type. One of {`bfloat16`, `float32`, `float16`}.
       mode: a ModeKeys. Specifies if this is training, evaluation, prediction or
-        prediction with groundtruths in the outputs.
+        prediction with ground-truths in the outputs.
     """
     self._mode = mode
     self._max_num_instances = max_num_instances
@@ -146,19 +146,18 @@ class Parser(parser.Parser):
     classes = data['groundtruth_classes']
     boxes = data['groundtruth_boxes']
     # If not empty, `attributes` is a dict of (name, ground_truth) pairs.
-    # `ground_gruth` of attributes is assumed in shape [N, attribute_size].
-    # TODO(xianzhi): support parsing attributes weights.
+    # `ground_truth` of attributes is assumed in shape [N, attribute_size].
     attributes = data.get('groundtruth_attributes', {})
     is_crowds = data['groundtruth_is_crowd']
 
     # Skips annotations with `is_crowd` = True.
     if self._skip_crowd_during_training:
-      num_groundtrtuhs = tf.shape(input=classes)[0]
-      with tf.control_dependencies([num_groundtrtuhs, is_crowds]):
+      num_groundtruths = tf.shape(input=classes)[0]
+      with tf.control_dependencies([num_groundtruths, is_crowds]):
         indices = tf.cond(
             pred=tf.greater(tf.size(input=is_crowds), 0),
             true_fn=lambda: tf.where(tf.logical_not(is_crowds))[:, 0],
-            false_fn=lambda: tf.cast(tf.range(num_groundtrtuhs), tf.int64))
+            false_fn=lambda: tf.cast(tf.range(num_groundtruths), tf.int64))
       classes = tf.gather(classes, indices)
       boxes = tf.gather(boxes, indices)
       for k, v in attributes.items():
@@ -197,7 +196,7 @@ class Parser(parser.Parser):
     offset = image_info[3, :]
     boxes = preprocess_ops.resize_and_crop_boxes(boxes, image_scale,
                                                  image_info[1, :], offset)
-    # Filters out ground truth boxes that are all zeros.
+    # Filters out ground-truth boxes that are all zeros.
     indices = box_ops.get_non_empty_box_indices(boxes)
     boxes = tf.gather(boxes, indices)
     classes = tf.gather(classes, indices)
@@ -240,8 +239,7 @@ class Parser(parser.Parser):
     classes = data['groundtruth_classes']
     boxes = data['groundtruth_boxes']
     # If not empty, `attributes` is a dict of (name, ground_truth) pairs.
-    # `ground_gruth` of attributes is assumed in shape [N, attribute_size].
-    # TODO(xianzhi): support parsing attributes weights.
+    # `ground_truth` of attributes is assumed in shape [N, attribute_size].
     attributes = data.get('groundtruth_attributes', {})
 
     # Gets original image and its size.
@@ -269,7 +267,7 @@ class Parser(parser.Parser):
     offset = image_info[3, :]
     boxes = preprocess_ops.resize_and_crop_boxes(boxes, image_scale,
                                                  image_info[1, :], offset)
-    # Filters out ground truth boxes that are all zeros.
+    # Filters out ground-truth boxes that are all zeros.
     indices = box_ops.get_non_empty_box_indices(boxes)
     boxes = tf.gather(boxes, indices)
     classes = tf.gather(classes, indices)
@@ -293,7 +291,7 @@ class Parser(parser.Parser):
     # Casts input image to desired data type.
     image = tf.cast(image, dtype=self._dtype)
 
-    # Sets up groundtruth data for evaluation.
+    # Sets up ground-truth data for evaluation.
     groundtruths = {
         'source_id': data['source_id'],
         'height': data['height'],

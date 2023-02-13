@@ -120,7 +120,8 @@ def build_maskrcnn(input_specs: tf.keras.layers.InputSpec,
       pre_nms_score_threshold=generator_config.pre_nms_score_threshold,
       nms_iou_threshold=generator_config.nms_iou_threshold,
       max_num_detections=generator_config.max_num_detections,
-      nms_version=generator_config.nms_version)
+      nms_version=generator_config.nms_version,
+      use_sigmoid_probability=generator_config.use_sigmoid_probability)
 
   if model_config.include_mask:
     mask_head = deep_instance_heads.DeepMaskHead(
@@ -162,6 +163,7 @@ def build_maskrcnn(input_specs: tf.keras.layers.InputSpec,
       mask_head=mask_head,
       mask_sampler=mask_sampler_obj,
       mask_roi_aligner=mask_roi_aligner_obj,
+      outer_boxes_scale=model_config.outer_boxes_scale,
       use_gt_boxes_for_masks=model_config.use_gt_boxes_for_masks)
   return model
 
@@ -171,7 +173,7 @@ class DeepMaskHeadRCNNTask(maskrcnn.MaskRCNNTask):
   """Mask R-CNN with support for deep mask heads."""
 
   def build_model(self):
-    """Build Mask R-CNN model."""
+    """Builds Mask R-CNN model."""
 
     input_specs = tf.keras.layers.InputSpec(
         shape=[None] + self.task_config.model.input_size)
@@ -187,4 +189,8 @@ class DeepMaskHeadRCNNTask(maskrcnn.MaskRCNNTask):
         input_specs=input_specs,
         model_config=self.task_config.model,
         l2_regularizer=l2_regularizer)
+
+    if self.task_config.freeze_backbone:
+      model.backbone.trainable = False
+
     return model

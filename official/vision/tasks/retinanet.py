@@ -22,6 +22,7 @@ from official.common import dataset_fn
 from official.core import base_task
 from official.core import task_factory
 from official.vision.configs import retinanet as exp_cfg
+from official.vision.dataloaders import input_reader
 from official.vision.dataloaders import input_reader_factory
 from official.vision.dataloaders import retinanet_input
 from official.vision.dataloaders import tf_example_decoder
@@ -134,6 +135,7 @@ class RetinaNetTask(base_task.Task):
         params,
         dataset_fn=dataset_fn.pick_dataset_fn(params.file_type),
         decoder_fn=decoder.decode,
+        combine_fn=input_reader.create_combine_fn(params),
         parser_fn=parser.parse_fn(params.is_training))
     dataset = reader.read(input_context=input_context)
 
@@ -246,7 +248,8 @@ class RetinaNetTask(base_task.Task):
         self.coco_metric = coco_evaluator.COCOEvaluator(
             annotation_file=self.task_config.annotation_file,
             include_mask=False,
-            per_category_metrics=self.task_config.per_category_metrics)
+            per_category_metrics=self.task_config.per_category_metrics,
+            max_num_eval_detections=self.task_config.max_num_eval_detections)
       if self._task_config.use_wod_metrics:
         # To use Waymo open dataset metrics, please install one of the pip
         # package `waymo-open-dataset-tf-*` from

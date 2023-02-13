@@ -16,7 +16,7 @@
 
 import dataclasses
 import os
-from typing import List, Optional, Union
+from typing import List, Optional, Sequence, Union
 
 from official.core import config_definitions as cfg
 from official.core import exp_factory
@@ -36,6 +36,8 @@ class Parser(hyperparams.Config):
   aug_rand_hflip: bool = False
   aug_scale_min: float = 1.0
   aug_scale_max: float = 1.0
+  aug_type: Optional[
+      common.Augmentation] = None  # Choose from AutoAugment and RandAugment.
   skip_crowd_during_training: bool = True
   max_num_instances: int = 100
   rpn_match_threshold: float = 0.7
@@ -48,7 +50,8 @@ class Parser(hyperparams.Config):
 @dataclasses.dataclass
 class DataConfig(cfg.DataConfig):
   """Input config for training."""
-  input_path: str = ''
+  input_path: Union[Sequence[str], str, hyperparams.Config] = ''
+  weights: Optional[hyperparams.Config] = None
   global_batch_size: int = 0
   is_training: bool = False
   dtype: str = 'bfloat16'
@@ -133,6 +136,7 @@ class DetectionGenerator(hyperparams.Config):
   nms_version: str = 'v2'  # `v2`, `v1`, `batched`
   use_cpu_nms: bool = False
   soft_nms_sigma: Optional[float] = None  # Only works when nms_version='v1'.
+  use_sigmoid_probability: bool = False
 
 
 @dataclasses.dataclass
@@ -163,6 +167,7 @@ class MaskRCNN(hyperparams.Config):
   max_level: int = 6
   anchor: Anchor = Anchor()
   include_mask: bool = True
+  outer_boxes_scale: float = 1.0
   backbone: backbones.Backbone = backbones.Backbone(
       type='resnet', resnet=backbones.ResNet())
   decoder: decoders.Decoder = decoders.Decoder(
@@ -187,6 +192,8 @@ class Losses(hyperparams.Config):
   loss_weight: float = 1.0
   rpn_huber_loss_delta: float = 1. / 9.
   frcnn_huber_loss_delta: float = 1.
+  frcnn_class_use_binary_cross_entropy: bool = False
+  frcnn_class_loss_top_k_percent: float = 1.
   l2_weight_decay: float = 0.0
   rpn_score_weight: float = 1.0
   rpn_box_weight: float = 1.0

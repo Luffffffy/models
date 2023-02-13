@@ -87,8 +87,6 @@ class SpatialPyramidPooling(tf.keras.layers.Layer):
     self.use_depthwise_convolution = use_depthwise_convolution
 
   def build(self, input_shape):
-    height = input_shape[1]
-    width = input_shape[2]
     channels = input_shape[3]
 
     self.aspp_layers = []
@@ -128,9 +126,6 @@ class SpatialPyramidPooling(tf.keras.layers.Layer):
                 depth_multiplier=1,
                 kernel_size=kernel_size,
                 padding='same',
-                depthwise_regularizer=self.kernel_regularizer,
-                depthwise_initializer=tf_utils.clone_initializer(
-                    self.kernel_initializer),
                 dilation_rate=dilation_rate,
                 use_bias=False)
         ]
@@ -174,12 +169,7 @@ class SpatialPyramidPooling(tf.keras.layers.Layer):
                 axis=bn_axis,
                 momentum=self.batchnorm_momentum,
                 epsilon=self.batchnorm_epsilon),
-            tf.keras.layers.Activation(self.activation),
-            tf.keras.layers.experimental.preprocessing.Resizing(
-                height,
-                width,
-                interpolation=self.interpolation,
-                dtype=tf.float32)
+            tf.keras.layers.Activation(self.activation)
         ]))
 
     self.aspp_layers.append(pool_sequential)
@@ -204,8 +194,12 @@ class SpatialPyramidPooling(tf.keras.layers.Layer):
     if training is None:
       training = tf.keras.backend.learning_phase()
     result = []
-    for layer in self.aspp_layers:
-      result.append(tf.cast(layer(inputs, training=training), inputs.dtype))
+    for i, layer in enumerate(self.aspp_layers):
+      x = layer(inputs, training=training)
+      # Apply resize layer to the end of the last set of layers.
+      if i == len(self.aspp_layers) - 1:
+        x = tf.image.resize(tf.cast(x, tf.float32), tf.shape(inputs)[1:3])
+      result.append(tf.cast(x, inputs.dtype))
     result = tf.concat(result, axis=-1)
     result = self.projection(result, training=training)
     return result

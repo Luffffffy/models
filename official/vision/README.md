@@ -72,16 +72,16 @@ depth, label smoothing and dropout.
 
 | Model     | Resolution | Params (M) | Top-1 | Top-5 | Download |
 | --------- | :--------: | ---------: | ----: | ----: | --------:|
-| ResNet-RS-50 | 160x160    | 35.7    | 79.1  | 94.5  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs50_i160.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-50-i160.tar.gz) |
-| ResNet-RS-101 | 160x160    | 63.7    | 80.2  | 94.9  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs101_i160.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-101-i160.tar.gz) |
-| ResNet-RS-101 | 192x192    | 63.7    | 81.3  | 95.6  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs101_i192.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-101-i192.tar.gz) |
-| ResNet-RS-152 | 192x192    | 86.8    | 81.9  | 95.8  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs152_i192.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-152-i192.tar.gz) |
-| ResNet-RS-152 | 224x224    | 86.8    | 82.5  | 96.1  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs152_i224.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-152-i224.tar.gz) |
-| ResNet-RS-152 | 256x256    | 86.8    | 83.1  | 96.3  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs152_i256.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-152-i256.tar.gz) |
-| ResNet-RS-200 | 256x256    | 93.4    | 83.5  | 96.6  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs200_i256.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-200-i256.tar.gz) |
-| ResNet-RS-270 | 256x256    | 130.1    | 83.6  | 96.6  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs270_i256.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-270-i256.tar.gz) |
-| ResNet-RS-350 | 256x256    |  164.3   | 83.7  | 96.7  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs350_i256.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-350-i256.tar.gz) |
-| ResNet-RS-350 | 320x320    | 164.3   | 84.2  | 96.9  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs420_i256.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/resnet-rs/resnet-rs-350-i320.tar.gz) |
+| ResNet-RS-50 | 160x160    | 35.7    | 79.1  | 94.5  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs50_i160.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-50-i160.tar.gz) |
+| ResNet-RS-101 | 160x160    | 63.7    | 80.2  | 94.9  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs101_i160.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-101-i160.tar.gz) |
+| ResNet-RS-101 | 192x192    | 63.7    | 81.3  | 95.6  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs101_i192.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-101-i192.tar.gz) |
+| ResNet-RS-152 | 192x192    | 86.8    | 81.9  | 95.8  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs152_i192.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-152-i192.tar.gz) |
+| ResNet-RS-152 | 224x224    | 86.8    | 82.5  | 96.1  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs152_i224.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-152-i224.tar.gz) |
+| ResNet-RS-152 | 256x256    | 86.8    | 83.1  | 96.3  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs152_i256.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-152-i256.tar.gz) |
+| ResNet-RS-200 | 256x256    | 93.4    | 83.5  | 96.6  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs200_i256.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-200-i256.tar.gz) |
+| ResNet-RS-270 | 256x256    | 130.1    | 83.6  | 96.6  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs270_i256.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-270-i256.tar.gz) |
+| ResNet-RS-350 | 256x256    |  164.3   | 83.7  | 96.7  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs350_i256.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-350-i256.tar.gz) |
+| ResNet-RS-350 | 320x320    | 164.3   | 84.2  | 96.9  | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnetrs420_i256.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet-rs/resnet-rs-350-i320.tar.gz) |
 
 </details>
 
@@ -89,9 +89,9 @@ depth, label smoothing and dropout.
 
 <details>
 
-We support [ViT](https://arxiv.org/abs/2010.11929) and [DEIT](https://arxiv.org/abs/2012.12877) implementations in a TF
-Vision
-[project](https://github.com/tensorflow/models/tree/master/official/projects/vit). ViT models trained under the DEIT settings:
+We support [ViT](https://arxiv.org/abs/2010.11929) and
+[DEIT](https://arxiv.org/abs/2012.12877) implementations. ViT models trained
+under the DEIT settings:
 
 model     | resolution | Top-1 | Top-5 |
 --------- | :--------: | ----: | ----: |
@@ -141,7 +141,7 @@ ViT-l16  | 224x224    | 82.2  | 95.8  |
 | Backbone     | Resolution    | Epochs  | FLOPs (B)     | Params (M) | Box AP | Download |
 | ------------ |:-------------:| -------:|--------------:|-----------:|-------:|---------:|
 | R50-FPN      | 640x640       |    12   | 97.0 | 34.0 | 34.3 | config|
-| R50-FPN      | 640x640       |    72   | 97.0 | 34.0 | 36.8 | config \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/retinanet/retinanet-resnet50fpn.tar.gz) |
+| R50-FPN      | 640x640       |    72   | 97.0 | 34.0 | 36.8 | config \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/retinanet/retinanet-resnet50fpn.tar.gz) |
 
 </details>
 
@@ -168,7 +168,7 @@ training features including:
 | Backbone    | Resolution | Epochs | FLOPs (B) | Params (M) | Box AP | Download |
 | ----------- | :--------: | -----: | --------: | ---------: | -----: | --------:|
 | MobileNetv2 | 256x256    | 600    | -         | 2.27       | 23.5   | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_mobilenetv2_tpu.yaml) |
-| Mobile SpineNet-49  | 384x384    | 600    | 1.0      | 2.32       | 28.1   | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet49_mobile_tpu.yaml) \| [ckpt](https://storage.cloud.google.com/tf_model_garden/vision/retinanet/spinenet49mobile.tar.gz) |
+| Mobile SpineNet-49  | 384x384    | 600    | 1.0      | 2.32       | 28.1   | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet49_mobile_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/retinanet/spinenet49mobile.tar.gz) |
 
 </details>
 
@@ -293,3 +293,8 @@ training features including:
 | MoViNet-A4-Base | 80 x 3            | 83.48 | 96.16 | [config](https://github.com/tensorflow/models/blob/master/official/projects/movinet/configs/yaml/movinet_a4_k600_8x8.yaml) |
 | MoViNet-A5-Base | 120 x 2           | 84.27 | 96.39 | [config](https://github.com/tensorflow/models/blob/master/official/projects/movinet/configs/yaml/movinet_a5_k600_8x8.yaml) |
 </details>
+
+## More Documentations
+
+Please read through the references in the
+[examples/starter](examples/starter).

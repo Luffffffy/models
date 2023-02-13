@@ -14,6 +14,9 @@ being easy to read.
 These models are used as end-to-end tests, ensuring that the models run
 with the same or improved speed and performance with each new TensorFlow build.
 
+The API documentation of the latest stable release is published to
+[tensorflow.org](https://www.tensorflow.org/api_docs/python/tfm).
+
 ## More models to come!
 
 The team is actively developing new models.
@@ -119,17 +122,16 @@ pip3 install tensorflow-text-nightly # when model uses `nlp` packages
 repository version numbers match with the target TensorFlow release. For
 example, [TensorFlow-models v2.8.x](https://github.com/tensorflow/models/releases/tag/v2.8.0)
 is compatible with [TensorFlow v2.8.x](https://github.com/tensorflow/tensorflow/releases/tag/v2.8.0).
-This is equivalent to the following.
+This is equivalent to the following:
 
 ```shell
-pip3 install tf-models-official==2.5.0
-pip3 install tensorflow-text==2.5.0 # when model uses `nlp` packages
+pip3 install tf-models-official==2.8.0
+pip3 install tensorflow-text==2.8.0 # when models in uses `nlp` packages
 ```
 
 Starting from 2.9.x release, we release the modeling library as
 `tensorflow_models` package and users can `import tensorflow_models` directly to
-access to the exported symbols. The API documentation is published to
-[tensorflow.org](https://www.tensorflow.org/api_docs/python/tfm). If you are
+access to the exported symbols. If you are
 using the latest nightly version or github code directly, please follow the
 docstrings in the github.
 
@@ -148,7 +150,15 @@ don't recommend earlier versions.
 ### Installation
 
 Please check [here](https://github.com/tensorflow/models#Installation) for the
-instructions
+instructions.
+
+Available pypi packages:
+
+* [tf-models-official](https://pypi.org/project/tf-models-official/)
+* [tf-models-nightly](https://pypi.org/project/tf-models-nightly/): nightly
+release with the latest changes.
+* [tf-models-no-deps](https://pypi.org/project/tf-models-no-deps/): without
+`tensorflow` and `tensorflow-text` in the `install_requires` list.
 
 ## Contributions
 

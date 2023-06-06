@@ -5,6 +5,11 @@ distributed by Google. The dataset is made available by third parties.
 Please review the terms and conditions made available by the third parties
 before using the data.
 
+⚠️ Disclaimer: Checkpoints are based on training with publicly available
+datasets. Some datasets contain limitations, including non-commercial use
+limitations. Please review terms and conditions made available by third parties
+before using models and datasets provided.
+
 ## Introduction
 
 TF-Vision modeling library for computer vision provides a collection of
@@ -25,9 +30,9 @@ segmentation.
 | Model        | Resolution    | Epochs  |  Top-1  |  Top-5  | Download |
 | ------------ |:-------------:|--------:|--------:|--------:|---------:|
 | ResNet-50    | 224x224       |    90    | 76.1 | 92.9 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet50_tpu.yaml) |
-| ResNet-50    | 224x224       |    200   | 77.1 | 93.5 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet50_tpu.yaml) |
-| ResNet-101   | 224x224       |    200   | 78.3 | 94.2 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet101_tpu.yaml) |
-| ResNet-152   | 224x224       |    200   | 78.7 | 94.3 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet152_tpu.yaml) |
+| ResNet-50    | 224x224       |    200   | 77.1 | 93.5 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet50_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet/resnet-50-i224.tar.gz) |
+| ResNet-101   | 224x224       |    200   | 78.3 | 94.2 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet101_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet/resnet-101-i224.tar.gz) |
+| ResNet-152   | 224x224       |    200   | 78.7 | 94.3 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification/imagenet_resnet152_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/resnet/resnet-152-i224.tar.gz) |
 
 #### ResNet-RS models trained with various settings
 
@@ -36,9 +41,9 @@ classification models with features:
 
 * ResNet-RS architectural changes and Swish activation. (Note that ResNet-RS
   adopts ReLU activation in the paper.)
-* Regularization methods including Random Augment, 4e-5 weight decay, stochastic
-depth, label smoothing and dropout.
-* New training methods including a 350-epoch schedule, cosine learning rate and
+* Regularization methods include Random Augment, 4e-5 weight decay, stochastic
+depth, label smoothing , and dropout.
+* New training methods including a 350-epoch schedule, cosine learning rate , and
   EMA.
 * Configs are in this [directory](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/image_classification).
 
@@ -81,17 +86,17 @@ ViT-l16  | 224x224    | 82.2  | 95.8  | [ckpt](https://storage.googleapis.com/tf
 * Models are all trained on [COCO](https://cocodataset.org/) train2017 and
 evaluated on [COCO](https://cocodataset.org/) val2017.
 * Training details:
-  * Models finetuned from [ImageNet](https://www.image-net.org/) pretrained
+  * Models finetuned from [ImageNet](https://www.image-net.org/) pre-trained
     checkpoints adopt the 12 or 36 epochs schedule. Models trained from scratch
     adopt the 350 epochs schedule.
   * The default training data augmentation implements horizontal flipping and
     scale jittering with a random scale between [0.5, 2.0].
   * Unless noted, all models are trained with l2 weight regularization and ReLU
     activation.
-  * We use batch size 256 and stepwise learning rate that decays at the last 30
-    and 10 epoch.
-  * We use square image as input by resizing the long side of an image to the
-    target size then padding the short side with zeros.
+  * We use batch size 256 and a stepwise learning rate that decays at the last 30
+    and 10 epochs.
+  * We use a square image as input by resizing the long side of an image to the
+    target size and then padding the short side with zeros.
 
 ### COCO Object Detection Baselines
 
@@ -109,9 +114,9 @@ evaluated on [COCO](https://cocodataset.org/) val2017.
 
 | Backbone     | Resolution    | Epochs  | FLOPs (B)     | Params (M) |  Box AP | Download |
 | ------------ |:-------------:| -------:|--------------:|-----------:|--------:|---------:|
-| SpineNet-49  | 640x640       |    500    | 85.4| 28.5 | 44.2 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet49_tpu.yaml) \| [TB.dev](https://tensorboard.dev/experiment/n2UN83TkTdyKZn3slCWulg/#scalars&_smoothingWeight=0)|
-| SpineNet-96  | 1024x1024     |    500    | 265.4 | 43.0 | 48.5 |  [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet96_tpu.yaml) \| [TB.dev](https://tensorboard.dev/experiment/n2UN83TkTdyKZn3slCWulg/#scalars&_smoothingWeight=0)|
-| SpineNet-143 | 1280x1280     |    500    | 524.0 | 67.0 | 50.0 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet143_tpu.yaml) \| [TB.dev](https://tensorboard.dev/experiment/n2UN83TkTdyKZn3slCWulg/#scalars&_smoothingWeight=0)|
+| SpineNet-49  | 640x640       |    500    | 85.4| 28.5 | 44.2 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet49_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/spinenet/spinenet-49-i640.tar.gz) \| [TB.dev](https://tensorboard.dev/experiment/n2UN83TkTdyKZn3slCWulg/#scalars&_smoothingWeight=0)|
+| SpineNet-96  | 1024x1024     |    500    | 265.4 | 43.0 | 48.5 |  [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet96_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/spinenet/spinenet-96-i1024.tar.gz) \| [TB.dev](https://tensorboard.dev/experiment/n2UN83TkTdyKZn3slCWulg/#scalars&_smoothingWeight=0)|
+| SpineNet-143 | 1280x1280     |    500    | 524.0 | 67.0 | 50.0 | [config](https://github.com/tensorflow/models/blob/master/official/vision/configs/experiments/retinanet/coco_spinenet143_tpu.yaml) \| [ckpt](https://storage.googleapis.com/tf_model_garden/vision/spinenet/spinenet-143-i1280.tar.gz) \| [TB.dev](https://tensorboard.dev/experiment/n2UN83TkTdyKZn3slCWulg/#scalars&_smoothingWeight=0)|
 
 #### Mobile-size RetinaNet (Trained from scratch):
 
@@ -152,7 +157,7 @@ evaluated on [COCO](https://cocodataset.org/) val2017.
 | Model      | Backbone           | Resolution | Steps | mIoU | Download |
 | ---------- | :----------------: | :--------: | ----: | ---: | --------:|
 | DeepLabV3  | Dilated Resnet-101 | 512x512    | 30k   | 78.7 |          |
-| DeepLabV3+ | Dilated Resnet-101 | 512x512    | 30k   | 79.2 |          |
+| DeepLabV3+ | Dilated Resnet-101 | 512x512    | 30k   | 79.2 | [ckpt](https://storage.googleapis.com/tf_model_garden/vision/deeplabv3plus/dilated-resnet-101-deeplabv3plus.tar.gz) |
 
 ### CITYSCAPES
 
@@ -177,9 +182,9 @@ evaluated on [COCO](https://cocodataset.org/) val2017.
 * Training and evaluation details (SlowFast and ResNet):
   * All models are trained from scratch with vision modality (RGB) for 200
     epochs.
-  * We use batch size of 1024 and cosine learning rate decay with linear warmup
-    in first 5 epochs.
-  * We follow [SlowFast](https://arxiv.org/abs/1812.03982) to perform 30-view
+  * We use a batch size of 1024 and cosine learning rate decay with a linear warmup
+    in the first 5 epochs.
+  * We follow [SlowFast](https://arxiv.org/abs/1812.03982) to perform a 30-view
     evaluation.
 
 ### Kinetics-400 Action Recognition Baselines

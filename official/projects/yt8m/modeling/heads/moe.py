@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,82 +12,66 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Contains model definitions."""
-from typing import Any, Dict, Optional
+"""MoE model definitions."""
+
+
+from typing import Any
 
 import tensorflow as tf
+
 from official.projects.yt8m.modeling import yt8m_model_utils as utils
+
 
 layers = tf.keras.layers
 
 
-class LogisticModel():
-  """Logistic model with L2 regularization."""
-
-  def create_model(self, model_input, vocab_size, l2_penalty=1e-8):
-    """Creates a logistic model.
-
-    Args:
-      model_input: 'batch' x 'num_features' matrix of input features.
-      vocab_size: The number of classes in the dataset.
-      l2_penalty: L2 weight regularization ratio.
-
-    Returns:
-      A dictionary with a tensor containing the probability predictions of the
-      model in the 'predictions' key. The dimensions of the tensor are
-      batch_size x num_classes.
-    """
-    output = layers.Dense(
-        vocab_size,
-        activation=tf.nn.sigmoid,
-        kernel_regularizer=tf.keras.regularizers.l2(l2_penalty))(
-            model_input)
-    return {"predictions": output}
-
-
-class MoeModel():
+class MoeModel(tf.keras.Model):
   """A softmax over a mixture of logistic models (with L2 regularization)."""
 
-  def create_model(self,
-                   model_input,
-                   vocab_size,
-                   num_mixtures: int = 2,
-                   use_input_context_gate: bool = False,
-                   use_output_context_gate: bool = False,
-                   normalizer_fn=None,
-                   normalizer_params: Optional[Dict[str, Any]] = None,
-                   vocab_as_last_dim: bool = False,
-                   l2_penalty: float = 1e-5):
+  def __init__(
+      self,
+      input_specs: layers.InputSpec = layers.InputSpec(shape=[None, 128]),
+      vocab_size: int = 3862,
+      num_mixtures: int = 2,
+      use_input_context_gate: bool = False,
+      use_output_context_gate: bool = False,
+      normalizer_params: dict[str, Any] | None = None,
+      vocab_as_last_dim: bool = False,
+      l2_regularizer: tf.keras.regularizers.Regularizer | None = None,
+      **kwargs,
+  ):
     """Creates a Mixture of (Logistic) Experts model.
 
      The model consists of a per-class softmax distribution over a
      configurable number of logistic classifiers. One of the classifiers
      in the mixture is not trained, and always predicts 0.
     Args:
-      model_input: 'batch_size' x 'num_features' matrix of input features.
+      input_specs: 'batch_size' x 'num_features' matrix of input features.
       vocab_size: The number of classes in the dataset.
       num_mixtures: The number of mixtures (excluding a dummy 'expert' that
         always predicts the non-existence of an entity).
       use_input_context_gate: if True apply context gate layer to the input.
       use_output_context_gate: if True apply context gate layer to the output.
-      normalizer_fn: normalization op constructor (e.g. batch norm).
-      normalizer_params: parameters to the `normalizer_fn`.
+      normalizer_params: parameters of the batch normalization.
       vocab_as_last_dim: if True reshape `activations` and make `vocab_size` as
         the last dimension to avoid small `num_mixtures` as the last dimension.
         XLA pads up the dimensions of tensors: typically the last dimension will
         be padded to 128, and the second to last will be padded to 8.
-      l2_penalty: How much to penalize the squared magnitudes of parameter
-        values.
+      l2_regularizer: An optional L2 weight regularizer.
+      **kwargs: extra key word args.
 
     Returns:
       A dictionary with a tensor containing the probability predictions
       of the model in the 'predictions' key. The dimensions of the tensor
       are batch_size x num_classes.
     """
+    inputs = tf.keras.Input(shape=input_specs.shape[1:])
+    model_input = inputs
+
     if use_input_context_gate:
       model_input = utils.context_gate(
           model_input,
-          normalizer_fn=normalizer_fn,
+          normalizer_fn=layers.BatchNormalization,
           normalizer_params=normalizer_params,
       )
 
@@ -95,12 +79,12 @@ class MoeModel():
         vocab_size * (num_mixtures + 1),
         activation=None,
         bias_initializer=None,
-        kernel_regularizer=tf.keras.regularizers.l2(l2_penalty))(
+        kernel_regularizer=l2_regularizer)(
             model_input)
     expert_activations = layers.Dense(
         vocab_size * num_mixtures,
         activation=None,
-        kernel_regularizer=tf.keras.regularizers.l2(l2_penalty))(
+        kernel_regularizer=l2_regularizer)(
             model_input)
 
     if vocab_as_last_dim:
@@ -127,7 +111,9 @@ class MoeModel():
     if use_output_context_gate:
       final_probabilities = utils.context_gate(
           final_probabilities,
-          normalizer_fn=normalizer_fn,
+          normalizer_fn=layers.BatchNormalization,
           normalizer_params=normalizer_params,
       )
-    return {"predictions": final_probabilities}
+
+    outputs = {"predictions": final_probabilities}
+    super().__init__(inputs=inputs, outputs=outputs, **kwargs)

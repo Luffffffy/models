@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,8 @@ def all_strategy_combinations():
   return combinations.combine(
       strategy=[
           strategy_combinations.cloud_tpu_strategy,
-          strategy_combinations.mirrored_strategy_with_two_gpus,
+          # TODO(b/285797201):disable multi-gpu tests due to hanging.
+          # strategy_combinations.mirrored_strategy_with_two_gpus,
       ],
       mode='eager',
   )

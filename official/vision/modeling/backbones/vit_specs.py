@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,8 +61,20 @@ VIT_SPECS = immutabledict.immutabledict({
         ),
     'vit-g14':
         dict(
+            hidden_size=1408,
+            patch_size=14,
+            transformer=dict(mlp_dim=5632, num_heads=16, num_layers=40),
+        ),
+    'vit-G14':
+        dict(
             hidden_size=1664,
             patch_size=14,
             transformer=dict(mlp_dim=8192, num_heads=16, num_layers=48),
+        ),
+    'vit-e14':
+        dict(
+            hidden_size=1792,
+            patch_size=14,
+            transformer=dict(mlp_dim=15360, num_heads=16, num_layers=56),
         ),
 })

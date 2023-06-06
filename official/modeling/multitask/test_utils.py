@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ class MockFooModel(tf.keras.Model):
     self.inputs = {"foo": tf.keras.Input(shape=(2,), dtype=tf.float32),
                    "bar": tf.keras.Input(shape=(2,), dtype=tf.float32)}
 
-  def call(self, inputs):
+  def call(self, inputs):  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
     self.add_loss(tf.zeros((1,), dtype=tf.float32))
     if "foo" in inputs:
       input_tensor = inputs["foo"]
@@ -49,7 +49,7 @@ class MockBarModel(tf.keras.Model):
     self._bar_specific_layer = tf.keras.layers.Dense(1)
     self.inputs = {"bar": tf.keras.Input(shape=(2,), dtype=tf.float32)}
 
-  def call(self, inputs):
+  def call(self, inputs):  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
     self.add_loss(tf.zeros((2,), dtype=tf.float32))
     return self._bar_specific_layer(self._share_layer(inputs["bar"]))
 

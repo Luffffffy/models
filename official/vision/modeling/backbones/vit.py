@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,6 +14,7 @@
 
 """VisionTransformer models."""
 
+import math
 from typing import Optional, Tuple
 
 from absl import logging
@@ -25,10 +26,11 @@ from official.vision.modeling.backbones.vit_specs import VIT_SPECS
 from official.vision.modeling.layers import nn_blocks
 from official.vision.modeling.layers import nn_layers
 
+
 layers = tf.keras.layers
 
 
-class AddPositionEmbs(tf.keras.layers.Layer):
+class AddPositionEmbs(layers.Layer):
   """Adds (optionally learned) positional embeddings to the inputs."""
 
   def __init__(self,
@@ -36,7 +38,7 @@ class AddPositionEmbs(tf.keras.layers.Layer):
                posemb_origin_shape: Optional[Tuple[int, int]] = None,
                posemb_target_shape: Optional[Tuple[int, int]] = None,
                **kwargs):
-    """Constructs Postional Embedding module.
+    """Constructs Positional Embedding module.
 
     The logic of this module is: the learnable positional embeddings length will
     be determined by the inputs_shape or posemb_origin_shape (if provided)
@@ -89,7 +91,7 @@ class AddPositionEmbs(tf.keras.layers.Layer):
     return inputs + pos_embedding
 
 
-class TokenLayer(tf.keras.layers.Layer):
+class TokenLayer(layers.Layer):
   """A simple layer to wrap token parameters."""
 
   def build(self, inputs_shape):
@@ -103,7 +105,7 @@ class TokenLayer(tf.keras.layers.Layer):
     return x
 
 
-class Encoder(tf.keras.layers.Layer):
+class Encoder(layers.Layer):
   """Transformer Encoder."""
 
   def __init__(self,
@@ -119,6 +121,8 @@ class Encoder(tf.keras.layers.Layer):
                add_pos_embed=True,
                pos_embed_origin_shape=None,
                pos_embed_target_shape=None,
+               layer_scale_init_value=0.0,
+               transformer_partition_dims=None,
                **kwargs):
     super().__init__(**kwargs)
     self._num_layers = num_layers
@@ -133,6 +137,8 @@ class Encoder(tf.keras.layers.Layer):
     self._add_pos_embed = add_pos_embed
     self._pos_embed_origin_shape = pos_embed_origin_shape
     self._pos_embed_target_shape = pos_embed_target_shape
+    self._layer_scale_init_value = layer_scale_init_value
+    self._transformer_partition_dims = transformer_partition_dims
 
   def build(self, input_shape):
     if self._add_pos_embed:
@@ -158,7 +164,9 @@ class Encoder(tf.keras.layers.Layer):
           norm_first=True,
           stochastic_depth_drop_rate=nn_layers.get_stochastic_depth_rate(
               self._init_stochastic_depth_rate, i + 1, self._num_layers),
-          norm_epsilon=1e-6)
+          norm_epsilon=1e-6,
+          layer_scale_init_value=self._layer_scale_init_value,
+          transformer_partition_dims=self._transformer_partition_dims)
       self._encoder_layers.append(encoder_layer)
     self._norm = layers.LayerNormalization(epsilon=1e-6)
     super().build(input_shape)
@@ -189,6 +197,8 @@ class Encoder(tf.keras.layers.Layer):
         'add_pos_embed': self._add_pos_embed,
         'pos_embed_origin_shape': self._pos_embed_origin_shape,
         'pos_embed_target_shape': self._pos_embed_target_shape,
+        'layer_scale_init_value': self._layer_scale_init_value,
+        'transformer_partition_dims': self._transformer_partition_dims,
     }
     config.update(updates)
     return config
@@ -197,21 +207,27 @@ class Encoder(tf.keras.layers.Layer):
 class VisionTransformer(tf.keras.Model):
   """Class to build VisionTransformer family model."""
 
-  def __init__(self,
-               mlp_dim=3072,
-               num_heads=12,
-               num_layers=12,
-               attention_dropout_rate=0.0,
-               dropout_rate=0.1,
-               init_stochastic_depth_rate=0.0,
-               input_specs=layers.InputSpec(shape=[None, None, None, 3]),
-               patch_size=16,
-               hidden_size=768,
-               representation_size=0,
-               pooler='token',
-               kernel_regularizer=None,
-               original_init: bool = True,
-               pos_embed_shape: Optional[Tuple[int, int]] = None):
+  def __init__(
+      self,
+      mlp_dim=3072,
+      num_heads=12,
+      num_layers=12,
+      attention_dropout_rate=0.0,
+      dropout_rate=0.1,
+      init_stochastic_depth_rate=0.0,
+      input_specs=layers.InputSpec(shape=[None, None, None, 3]),
+      patch_size=16,
+      hidden_size=768,
+      representation_size=0,
+      pooler='token',
+      kernel_regularizer=None,
+      original_init: bool = True,
+      output_encoded_tokens: bool = True,
+      output_2d_feature_maps: bool = False,
+      pos_embed_shape: Optional[Tuple[int, int]] = None,
+      layer_scale_init_value: float = 0.0,
+      transformer_partition_dims: Optional[Tuple[int, int, int, int]] = None,
+  ):
     """VisionTransformer initialization function."""
     self._mlp_dim = mlp_dim
     self._num_heads = num_heads
@@ -240,8 +256,9 @@ class VisionTransformer(tf.keras.Model):
       x = tf.transpose(x, perm=[0, 2, 3, 1])
 
     pos_embed_target_shape = (x.shape[rows_axis], x.shape[cols_axis])
-    seq_len = (input_specs.shape[rows_axis] // patch_size) * (
-        input_specs.shape[cols_axis] // patch_size)
+    feat_h = input_specs.shape[rows_axis] // patch_size
+    feat_w = input_specs.shape[cols_axis] // patch_size
+    seq_len = feat_h * feat_w
     x = tf.reshape(x, [-1, seq_len, hidden_size])
 
     # If we want to add a class token, add it here.
@@ -259,37 +276,61 @@ class VisionTransformer(tf.keras.Model):
             class_name='TruncatedNormal', config=dict(stddev=.02)),
         init_stochastic_depth_rate=init_stochastic_depth_rate,
         pos_embed_origin_shape=pos_embed_shape,
-        pos_embed_target_shape=pos_embed_target_shape)(
+        pos_embed_target_shape=pos_embed_target_shape,
+        layer_scale_init_value=layer_scale_init_value)(
             x)
 
     if pooler == 'token':
+      output_feature = x[:, 1:]
       x = x[:, 0]
     elif pooler == 'gap':
+      output_feature = x
       x = tf.reduce_mean(x, axis=1)
     elif pooler == 'none':
+      output_feature = x
       x = tf.identity(x, name='encoded_tokens')
     else:
       raise ValueError(f'unrecognized pooler type: {pooler}')
 
+    endpoints = {}
+    if output_2d_feature_maps:
+      # Use the closest feature level.
+      feat_level = round(math.log2(patch_size))
+      logging.info(
+          'VisionTransformer patch size %d and feature level: %d',
+          patch_size,
+          feat_level,
+      )
+      endpoints[str(feat_level)] = tf.reshape(
+          output_feature, [-1, feat_h, feat_w, x.shape.as_list()[-1]])
+
+      # Don"t include `pre_logits` or `encoded_tokens` to support decoders.
+      self._output_specs = {k: v.shape for k, v in endpoints.items()}
+
     if representation_size:
-      x = tf.keras.layers.Dense(
+      x = layers.Dense(
           representation_size,
           kernel_regularizer=kernel_regularizer,
           name='pre_logits',
-          kernel_initializer='lecun_normal' if original_init else 'he_uniform')(
-              x)
+          kernel_initializer='lecun_normal' if original_init else 'he_uniform',
+      )(x)
       x = tf.nn.tanh(x)
     else:
       x = tf.identity(x, name='pre_logits')
 
     if pooler == 'none':
-      endpoints = {'encoded_tokens': x}
+      if output_encoded_tokens:
+        endpoints['encoded_tokens'] = x
     else:
-      endpoints = {
-          'pre_logits':
-              tf.reshape(x, [-1, 1, 1, representation_size or hidden_size])
-      }
-    super(VisionTransformer, self).__init__(inputs=inputs, outputs=endpoints)
+      endpoints['pre_logits'] = tf.reshape(
+          x, [-1, 1, 1, representation_size or hidden_size])
+
+    super().__init__(inputs=inputs, outputs=endpoints)
+
+  @property
+  def output_specs(self):
+    """A dict of {level: TensorShape} pairs for the model output."""
+    return self._output_specs
 
 
 @factory.register_backbone_builder('vit')
@@ -304,6 +345,18 @@ def build_vit(input_specs,
   assert backbone_type == 'vit', (f'Inconsistent backbone type '
                                   f'{backbone_type}')
   backbone_cfg.override(VIT_SPECS[backbone_cfg.model_name])
+  logging.info(
+      (
+          'ViT specs: mlp_dim=%d, num_heads=%d, num_layers=%d,'
+          'patch_size=%d, hidden_size=%d, representation_size=%d.'
+      ),
+      backbone_cfg.transformer.mlp_dim,
+      backbone_cfg.transformer.num_heads,
+      backbone_cfg.transformer.num_layers,
+      backbone_cfg.patch_size,
+      backbone_cfg.hidden_size,
+      backbone_cfg.representation_size,
+  )
 
   return VisionTransformer(
       mlp_dim=backbone_cfg.transformer.mlp_dim,
@@ -319,4 +372,8 @@ def build_vit(input_specs,
       pooler=backbone_cfg.pooler,
       kernel_regularizer=l2_regularizer,
       original_init=backbone_cfg.original_init,
-      pos_embed_shape=backbone_cfg.pos_embed_shape)
+      output_encoded_tokens=backbone_cfg.output_encoded_tokens,
+      output_2d_feature_maps=backbone_cfg.output_2d_feature_maps,
+      layer_scale_init_value=backbone_cfg.layer_scale_init_value,
+      pos_embed_shape=backbone_cfg.pos_embed_shape,
+      transformer_partition_dims=backbone_cfg.transformer_partition_dims)

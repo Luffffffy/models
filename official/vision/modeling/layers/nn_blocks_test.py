@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,8 +24,8 @@ import tensorflow as tf
 
 from tensorflow.python.distribute import combinations
 from tensorflow.python.distribute import strategy_combinations
-from official.nlp import modeling as nlp_modeling
 from official.vision.modeling.layers import nn_blocks
+from official.vision.modeling.layers import nn_layers
 
 
 def distribution_strategy_combinations() -> Iterable[Tuple[Any, ...]]:
@@ -63,6 +63,54 @@ class NNBlocksTest(parameterized.TestCase, tf.test.TestCase):
     self.assertAllEqual(
         [1, input_size // strides, input_size // strides, filter_size],
         features.shape.as_list())
+
+  def test_layerscale_call(self):
+    # Set up test inputs
+    input_shape = (2, 3, 4)
+    init_values = 1e-4
+    inputs = tf.ones(input_shape, dtype=tf.float32)
+
+    # Instantiate LayerScale object
+    layer_scale = nn_blocks.LayerScale(init_values)
+
+    # Call LayerScale object on test inputs
+    output = layer_scale(inputs)
+
+    # Check output shape
+    expected_output_shape = input_shape
+    self.assertAllEqual(output.shape, expected_output_shape)
+
+    # Check that output values are correct
+    expected_output_values = init_values * np.ones(input_shape)
+    self.assertAllClose(
+        output.numpy(), expected_output_values, rtol=1e-5, atol=1e-5)
+
+  def test_layerscale_training(self):
+    # Verify that gamma values have changed from their initial values in one
+    # step forward pass.
+    # Set up test inputs
+    input_shape = (1, 3, 4)
+    init_values = 1e-4
+    inputs = tf.ones(input_shape, dtype=tf.float32)
+    targets = tf.ones(input_shape, dtype=tf.float32)
+
+    # Instantiate LayerScale object
+    layer_scale = nn_blocks.LayerScale(init_values)
+
+    # Define optimizer and loss function
+    optimizer = tf.keras.optimizers.Adam()
+    loss_fn = tf.keras.losses.MeanSquaredError()
+
+    # Train the model for one step
+    with tf.GradientTape() as tape:
+      predictions = layer_scale(inputs)
+      loss = loss_fn(targets, predictions)
+    grads = tape.gradient(loss, layer_scale.trainable_variables)
+    optimizer.apply_gradients(zip(grads, layer_scale.trainable_variables))
+
+    # Check that gamma values have changed
+    updated_gamma = layer_scale.gamma.numpy()[0, 0, 0]
+    self.assertNotEqual(updated_gamma, init_values)
 
   @parameterized.parameters(
       (nn_blocks.BottleneckBlock, 1, False, 0.0, None),
@@ -344,7 +392,7 @@ class ReversibleLayerTest(parameterized.TestCase, tf.test.TestCase):
 # boolean 'True'. We register this class as a Keras serializable so we can
 # test serialization below.
 @tf.keras.utils.register_keras_serializable(package='TestOnlyAttention')
-class ValidatedAttentionLayer(nlp_modeling.layers.attention.MultiHeadAttention):
+class ValidatedAttentionLayer(nn_layers.MultiHeadAttention):
 
   def __init__(self, call_list, **kwargs):
     super(ValidatedAttentionLayer, self).__init__(**kwargs)
@@ -366,7 +414,7 @@ class ValidatedAttentionLayer(nlp_modeling.layers.attention.MultiHeadAttention):
 
   def get_config(self):
     config = super(ValidatedAttentionLayer, self).get_config()
-    config['call_list'] = []
+    config['call_list'] = self.list
     return config
 
 
@@ -383,7 +431,7 @@ class ValidatedFeedforwardLayer(tf.keras.layers.Layer):
     self.activation = activation
 
   def build(self, input_shape):
-    hidden_size = input_shape.as_list()[-1]
+    hidden_size = input_shape[-1]
     self._feedforward_dense = tf.keras.layers.EinsumDense(
         '...x,xy->...y',
         output_shape=hidden_size,
@@ -408,22 +456,24 @@ class TransformerLayerTest(tf.test.TestCase, parameterized.TestCase):
     super(TransformerLayerTest, self).tearDown()
     tf.keras.mixed_precision.set_global_policy('float32')
 
-  def test_layer_creation(self):
+  @parameterized.parameters(None, 2)
+  def test_layer_creation(self, max_attention_inference_parallelism):
     sequence_length = 21
     width = 80
 
-    call_list = []
     attention_layer_cfg = {
         'num_heads': 10,
         'key_dim': 8,
-        'call_list': call_list,
+        'call_list': []
     }
     test_layer = nn_blocks.TransformerScaffold(
         attention_cls=ValidatedAttentionLayer,
         attention_cfg=attention_layer_cfg,
         num_attention_heads=10,
         inner_dim=2048,
-        inner_activation='relu')
+        inner_activation='relu',
+        max_attention_inference_parallelism=max_attention_inference_parallelism,
+    )
 
     # Create a 3-dimensional input (the first dimension is implicit).
     data_tensor = tf.keras.Input(shape=(sequence_length, width))
@@ -431,6 +481,7 @@ class TransformerLayerTest(tf.test.TestCase, parameterized.TestCase):
     # The default output of a transformer layer should be the same as the input.
     self.assertEqual(data_tensor.shape.as_list(), output_tensor.shape.as_list())
 
+    call_list = test_layer._attention_layer.get_config()['call_list']
     # If call_list[0] exists and is True, the passed layer class was
     # instantiated from the given config properly.
     self.assertNotEmpty(call_list)
@@ -503,22 +554,23 @@ class TransformerLayerTest(tf.test.TestCase, parameterized.TestCase):
     self.assertNotEmpty(call_list)
     self.assertTrue(call_list[0], "The passed layer class wasn't instantiated.")
 
-  def test_layer_invocation(self):
+  @parameterized.parameters(None, 2)
+  def test_layer_invocation(self, max_attention_inference_parallelism):
     sequence_length = 21
     width = 80
 
-    call_list = []
     attention_layer_cfg = {
         'num_heads': 10,
         'key_dim': 8,
-        'call_list': call_list,
+        'call_list': [],
     }
     test_layer = nn_blocks.TransformerScaffold(
         attention_cls=ValidatedAttentionLayer,
         attention_cfg=attention_layer_cfg,
         num_attention_heads=10,
         inner_dim=2048,
-        inner_activation='relu')
+        inner_activation='relu',
+        max_attention_inference_parallelism=max_attention_inference_parallelism)
 
     # Create a 3-dimensional input (the first dimension is implicit).
     data_tensor = tf.keras.Input(shape=(sequence_length, width))
@@ -533,6 +585,8 @@ class TransformerLayerTest(tf.test.TestCase, parameterized.TestCase):
     input_data = 10 * np.random.random_sample(
         (batch_size, sequence_length, width))
     _ = model.predict(input_data)
+
+    call_list = test_layer._attention_layer.get_config()['call_list']
     # If call_list[0] exists and is True, the passed layer class was
     # instantiated from the given config properly.
     self.assertNotEmpty(call_list)

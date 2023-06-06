@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -121,7 +121,6 @@ class DataConfig(cfg.DataConfig):
   input_path: str = ''
   tfds_name: str = ''
   tfds_split: str = ''
-  global_batch_size: int = 1
   is_training: bool = True
   dtype: str = 'float16'
   decoder: DataDecoder = DataDecoder()
@@ -141,17 +140,21 @@ class YoloHead(hyperparams.Config):
 
 @dataclasses.dataclass
 class YoloDetectionGenerator(hyperparams.Config):
+  apply_nms: bool = True
   box_type: FPNConfig = dataclasses.field(
       default_factory=_build_dict(MIN_LEVEL, MAX_LEVEL, 'original'))
   scale_xy: FPNConfig = dataclasses.field(
       default_factory=_build_dict(MIN_LEVEL, MAX_LEVEL, 1.0))
   path_scales: FPNConfig = dataclasses.field(
       default_factory=_build_path_scales(MIN_LEVEL, MAX_LEVEL))
-  nms_type: str = 'greedy'
+  # Choose from v1, v2, iou and greedy.
+  nms_version: str = 'greedy'
   iou_thresh: float = 0.001
   nms_thresh: float = 0.6
   max_boxes: int = 200
   pre_nms_points: int = 5000
+  # Only works when nms_version='v2'.
+  use_class_agnostic_nms: Optional[bool] = False
 
 
 @dataclasses.dataclass
@@ -417,8 +420,7 @@ def scaled_yolo() -> cfg.ExperimentConfig:
           smart_bias_lr=0.1,
           init_checkpoint_modules='',
           weight_decay=0.0,
-          annotation_file=os.path.join(COCO_INPUT_PATH_BASE,
-                                       'instances_val2017.json'),
+          annotation_file=None,
           model=Yolo(
               darknet_based_model=False,
               norm_activation=common.NormActivation(

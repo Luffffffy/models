@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -346,7 +346,7 @@ class GroupConv2DKerasModel(tf.keras.Model):
             self.batch_norm_layer(
                 axis=-1, momentum=bn_momentum, epsilon=bn_epsilon))  # pytype: disable=bad-return-type  # typed-keras
 
-  def call(self, inputs: Any) -> Any:
+  def call(self, inputs: Any) -> Any:  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
     """Applies 2d group convolution on the inputs."""
     input_shape = inputs.get_shape().as_list()
     if input_shape[-1] % self._groups != 0:

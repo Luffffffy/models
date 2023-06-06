@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +26,7 @@ class Transformer(hyperparams.Config):
   num_heads: int = 1
   num_layers: int = 1
   attention_dropout_rate: float = 0.0
-  dropout_rate: float = 0.1
+  dropout_rate: float = 0.0
 
 
 @dataclasses.dataclass
@@ -43,6 +43,15 @@ class VisionTransformer(hyperparams.Config):
   init_stochastic_depth_rate: float = 0.0
   original_init: bool = True
   pos_embed_shape: Optional[Tuple[int, int]] = None
+  # If output encoded tokens sequence when pooler is `none`.
+  output_encoded_tokens: bool = True
+  # If output encoded tokens 2D feature map.
+  output_2d_feature_maps: bool = False
+
+  # Adding Layerscale to each Encoder block https://arxiv.org/abs/2204.07118
+  layer_scale_init_value: float = 0.0
+  # Transformer encoder spatial partition dimensions.
+  transformer_partition_dims: Optional[Tuple[int, int, int, int]] = None
 
 
 @dataclasses.dataclass

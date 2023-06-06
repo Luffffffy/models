@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -222,7 +222,7 @@ class DETR(tf.keras.Model):
         mask, target_shape, method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
     return mask
 
-  def call(self, inputs: tf.Tensor, training: bool = None) -> List[Any]:
+  def call(self, inputs: tf.Tensor, training: bool = None) -> List[Any]:  # pytype: disable=signature-mismatch  # overriding-parameter-count-checks
     batch_size = tf.shape(inputs)[0]
     features = self._backbone(inputs)[self._backbone_endpoint_name]
     shape = tf.shape(features)

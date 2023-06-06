@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -382,6 +382,6 @@ class PointPillarsTask(base_task.Task):
     """Called after eval_end to calculate metrics."""
     logging.info('Reducing aggregated metrics after one evaluation cycle.')
     logs = {}
-    if self._task_config.use_wod_metrics:
+    if self.task_config.use_wod_metrics:
       logs.update(self._wod_metric.result())
     return logs

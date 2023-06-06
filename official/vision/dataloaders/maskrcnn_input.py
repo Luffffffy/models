@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,6 +43,7 @@ class Parser(parser.Parser):
                rpn_batch_size_per_im=256,
                rpn_fg_fraction=0.5,
                aug_rand_hflip=False,
+               aug_rand_vflip=False,
                aug_scale_min=1.0,
                aug_scale_max=1.0,
                aug_type: Optional[common.Augmentation] = None,
@@ -72,8 +73,10 @@ class Parser(parser.Parser):
       rpn_unmatched_threshold:
       rpn_batch_size_per_im:
       rpn_fg_fraction:
-      aug_rand_hflip: `bool`, if True, augment training with random
-        horizontal flip.
+      aug_rand_hflip: `bool`, if True, augment training with random horizontal
+        flip.
+      aug_rand_vflip: `bool`, if True, augment training with random vertical
+        flip.
       aug_scale_min: `float`, the minimum scale applied to `output_size` for
         data augmentation during training.
       aug_scale_max: `float`, the maximum scale applied to `output_size` for
@@ -111,6 +114,7 @@ class Parser(parser.Parser):
 
     # Data augmentation.
     self._aug_rand_hflip = aug_rand_hflip
+    self._aug_rand_vflip = aug_rand_vflip
     self._aug_scale_min = aug_scale_min
     self._aug_scale_max = aug_scale_max
 
@@ -207,13 +211,18 @@ class Parser(parser.Parser):
     image = preprocess_ops.normalize_image(image)
 
     # Flips image randomly during training.
-    if self._aug_rand_hflip:
-      if self._include_mask:
-        image, boxes, masks = preprocess_ops.random_horizontal_flip(
-            image, boxes, masks)
-      else:
-        image, boxes, _ = preprocess_ops.random_horizontal_flip(
-            image, boxes)
+    image, boxes, masks = preprocess_ops.random_horizontal_flip(
+        image,
+        boxes,
+        masks=None if not self._include_mask else masks,
+        prob=tf.where(self._aug_rand_hflip, 0.5, 0.0),
+    )
+    image, boxes, masks = preprocess_ops.random_vertical_flip(
+        image,
+        boxes,
+        masks=None if not self._include_mask else masks,
+        prob=tf.where(self._aug_rand_vflip, 0.5, 0.0),
+    )
 
     # Converts boxes from normalized coordinates to pixel coordinates.
     # Now the coordinates of boxes are w.r.t. the original image.

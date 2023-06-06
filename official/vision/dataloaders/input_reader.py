@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -198,24 +198,21 @@ class CombinationDatasetInputReader(input_reader.InputReader):
               self._global_batch_size, self._pseudo_label_data_ratio))
 
     def _read_decode_and_parse_dataset(matched_files, dataset_fn, batch_size,
-                                       input_context, tfds_builder):
-      dataset = self._read_data_source(matched_files, dataset_fn, input_context,
-                                       tfds_builder)
+                                       input_context):
+      dataset = self._read_data_source(matched_files, dataset_fn, input_context)
       return self._decode_and_parse_dataset(dataset, batch_size, input_context)
 
     labeled_dataset = _read_decode_and_parse_dataset(
         matched_files=self._matched_files,
         dataset_fn=self._dataset_fn,
         batch_size=labeled_batch_size,
-        input_context=input_context,
-        tfds_builder=self._tfds_builder)
+        input_context=input_context)
 
     pseudo_labeled_dataset = _read_decode_and_parse_dataset(
         matched_files=self._pseudo_label_matched_files,
         dataset_fn=self._pseudo_label_dataset_fn,
         batch_size=pl_batch_size,
-        input_context=input_context,
-        tfds_builder=False)
+        input_context=input_context)
 
     def concat_fn(d1, d2):
       return tf.nest.map_structure(

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -116,6 +116,27 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
          [0.0, 0.0]],
         image_info.numpy(),
         1e-5)
+
+  @parameterized.parameters((1,), (2,))
+  def test_resize_and_crop_image_tensor_desired_size(self, aug_scale_max):
+    image = tf.convert_to_tensor(np.random.rand(100, 200, 3))
+
+    desired_size = tf.convert_to_tensor((220, 220), dtype=tf.int32)
+    resized_image, image_info = preprocess_ops.resize_and_crop_image(
+        image,
+        desired_size=desired_size,
+        padded_size=preprocess_ops.compute_padded_size(desired_size, 32),
+        aug_scale_max=aug_scale_max)
+    resized_image_shape = tf.shape(resized_image)
+
+    self.assertAllEqual([224, 224, 3], resized_image_shape.numpy())
+    self.assertAllEqual([[100, 200], [220, 220]], image_info[:2].numpy())
+    if aug_scale_max == 1:  # No random jittering.
+      self.assertNDArrayNear(
+          [[1.1, 1.1], [0.0, 0.0]],
+          image_info[2:].numpy(),
+          1e-5,
+      )
 
   @parameterized.parameters(
       (100, 200, 100, 300, 32, 1.0, 1.0, 100, 200, 128, 320),
@@ -284,6 +305,30 @@ class InputUtilsTest(parameterized.TestCase, tf.test.TestCase):
         ],
     ])
     self.assertAllEqual(expected_output, output)
+
+  @parameterized.parameters(
+      (100, 200, 1.0, 224, 224, 224, 224),
+      (512, 512, 1.0, 1024, 1024, 1024, 1024),
+  )
+  def test_deit3_resize_center_crop(
+      self, input_height, input_width, center_crop_fraction,
+      desired_height, desired_width,
+      output_height, output_width):
+    # Make sure that with center_crop_ratio = 1; result has desired resolution.
+    image = tf.convert_to_tensor(
+        np.random.rand(input_height, input_width, 3))
+
+    desired_size = (desired_height, desired_width)
+    center_cropped = preprocess_ops.center_crop_image(
+        image,
+        center_crop_fraction=center_crop_fraction)
+    resized_image = tf.image.resize(
+        center_cropped, desired_size, method=tf.image.ResizeMethod.BICUBIC)
+    resized_image_shape = tf.shape(resized_image)
+
+    self.assertAllEqual(
+        [output_height, output_width, 3],
+        resized_image_shape.numpy())
 
 
 if __name__ == '__main__':

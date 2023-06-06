@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -33,6 +33,7 @@ class DumpConfig2(base_config.Config):
   c: int = 2
   d: str = 'text'
   e: DumpConfig1 = DumpConfig1()
+  optional_e: Optional[DumpConfig1] = None
 
 
 @dataclasses.dataclass
@@ -347,6 +348,34 @@ class BaseConfigTest(parameterized.TestCase, tf.test.TestCase):
             }
         ]),
         "['s', 1, 1.0, True, None, {}, [], (), {8: 9, (2,): (3, [4], {6: 7})}]")
+
+  def test_with_superclass_override(self):
+    config = DumpConfig2()
+    config.override({'optional_e': {'a': 2}})
+    self.assertEqual(
+        config.optional_e.as_dict(),
+        {
+            'a': 2,
+            'b': 'text',
+        },
+    )
+
+    # Previously, the following will fail. See b/274696969 for context.
+    config = DumpConfig3()
+    config.override({'optional_e': {'a': 2}})
+    self.assertEqual(
+        config.optional_e.as_dict(),
+        {
+            'a': 2,
+            'b': 'text',
+        },
+    )
+
+  def test_get_annotations_without_base_config_leak(self):
+    with self.assertRaisesRegex(
+        KeyError, "The key 'restrictions' does not exist"
+    ):
+      DumpConfig3().override({'restrictions': None})
 
   def test_with_restrictions(self):
     restrictions = ['e.a<c']

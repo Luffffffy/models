@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -96,6 +96,20 @@ class Config(params_dict.ParamsDict):
     return self._BUILDER
 
   @classmethod
+  def _get_annotations(cls):
+    """Returns valid annotations.
+
+    Note: this is similar to dataclasses.__annotations__ except it also includes
+      annotations from its parent classes.
+    """
+    all_annotations = typing.get_type_hints(cls)
+    # Removes Config class annotation from the value, e.g., default_params,
+    # restrictions, etc.
+    for k in Config.__annotations__:
+      del all_annotations[k]
+    return all_annotations
+
+  @classmethod
   def _isvalidsequence(cls, v):
     """Check if the input values are valid sequences.
 
@@ -156,11 +170,15 @@ class Config(params_dict.ParamsDict):
       raise TypeError('Unknown type: {!r}'.format(type(v)))
 
   @classmethod
-  def _get_subconfig_type(cls, k) -> Type[params_dict.ParamsDict]:
+  def _get_subconfig_type(
+      cls, k, subconfig_type=None
+  ) -> Type[params_dict.ParamsDict]:
     """Get element type by the field name.
 
     Args:
       k: the key/name of the field.
+      subconfig_type: default subconfig_type. If None, it is set to
+        Config.
 
     Returns:
       Config as default. If a type annotation is found for `k`,
@@ -168,10 +186,13 @@ class Config(params_dict.ParamsDict):
       2) returns the element type if the annotation of `k` is List[SubType]
          or Tuple[SubType].
     """
-    subconfig_type = Config
-    if k in cls.__annotations__:
+    if not subconfig_type:
+      subconfig_type = Config
+
+    annotations = cls._get_annotations()
+    if k in annotations:
       # Directly Config subtype.
-      type_annotation = cls.__annotations__[k]  # pytype: disable=invalid-annotation
+      type_annotation = annotations[k]
       i = 0
       # Loop for striping the Optional annotation.
       traverse_in = True
@@ -320,6 +341,9 @@ class Config(params_dict.ParamsDict):
   @classmethod
   def from_args(cls, *args, **kwargs):
     """Builds a config from the given list of arguments."""
+    # Note we intend to keep `__annotations__` instead of `_get_annotations`.
+    # Assuming a parent class of (a, b) with the sub-class of (c, d), the
+    # sub-class will take (c, d) for args, rather than starting from (a, b).
     attributes = list(cls.__annotations__.keys())
     default_params = {a: p for a, p in zip(attributes, args)}
     default_params.update(kwargs)

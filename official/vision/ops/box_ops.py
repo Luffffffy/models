@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -236,6 +236,28 @@ def horizontal_flip_boxes(normalized_boxes):
     flipped_xmin = tf.subtract(1.0, xmax)
     flipped_xmax = tf.subtract(1.0, xmin)
     flipped_boxes = tf.concat([ymin, flipped_xmin, ymax, flipped_xmax], axis=-1)
+    return flipped_boxes
+
+
+def vertical_flip_boxes(normalized_boxes):
+  """Flips normalized boxes vertically.
+
+  Args:
+    normalized_boxes: the boxes in normalzied coordinates.
+
+  Returns:
+    vertically flipped boxes.
+  """
+  if normalized_boxes.shape[-1] != 4:
+    raise ValueError('boxes.shape[-1] is {:d}, but must be 4.'.format(
+        normalized_boxes.shape[-1]))
+
+  with tf.name_scope('vertical_flip_boxes'):
+    ymin, xmin, ymax, xmax = tf.split(
+        value=normalized_boxes, num_or_size_splits=4, axis=-1)
+    flipped_ymin = tf.subtract(1.0, ymax)
+    flipped_ymax = tf.subtract(1.0, ymin)
+    flipped_boxes = tf.concat([flipped_ymin, xmin, flipped_ymax, xmax], axis=-1)
     return flipped_boxes
 
 

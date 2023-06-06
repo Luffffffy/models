@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +13,7 @@
 # limitations under the License.
 
 """Training utils."""
-import copy
+
 import dataclasses
 import inspect
 import json
@@ -23,10 +23,12 @@ from typing import Any, Callable, Dict, List, Optional, Union
 
 from absl import logging
 import gin
+import numpy as np
 import orbit
 import tensorflow as tf
 
 # pylint: disable=g-direct-tensorflow-import
+from tensorflow.python.framework import ops
 from tensorflow.python.framework.convert_to_constants import convert_variables_to_constants_v2_as_graph
 # pylint: enable=g-direct-tensorflow-import
 from official.core import base_task
@@ -83,6 +85,29 @@ def cast_leaf_nested_dict(d: Dict[str, Any],
     else:
       d[key] = cast_fn(value)
   return d
+
+
+def _filter_leaf_nested_dict(
+    d: Dict[str, Any], predicate: Callable[[Any], bool]
+) -> Dict[str, Any]:
+  """Filters the leaves of a dictionary with arbitrary depth in place.
+
+  Args:
+    d: The dictionary to extract value from.
+    predicate: A function that will be called on every leave item. When the
+      function returns True the leave will be kept. Otherwise the leave will be
+      dropped.
+
+  Returns:
+    A new dictionray with filtered result.
+  """
+  result = {}
+  for key, value in d.items():
+    if isinstance(value, dict):
+      result[key] = _filter_leaf_nested_dict(value, predicate)
+    elif predicate(value):
+      result[key] = value
+  return result
 
 
 def maybe_create_best_ckpt_exporter(params: config_definitions.ExperimentConfig,
@@ -190,7 +215,11 @@ class BestCheckpointExporter:
 
   def export_best_eval_metric(self, eval_logs, global_step):
     """Export evaluation results of the best checkpoint into a json file."""
-    eval_logs_ext = copy.copy(eval_logs)
+    # eval_log_ext may contains non-scalar tensors, such as image data when
+    # `allow_image_summary` is True. Here we only keep scalar tensors.
+    eval_logs_ext = _filter_leaf_nested_dict(
+        eval_logs, lambda x: tf.rank(x) <= 1
+    )
     eval_logs_ext['best_ckpt_global_step'] = global_step
     eval_logs_ext = cast_leaf_nested_dict(
         eval_logs_ext, lambda x: float(orbit.utils.get_value(x)))
@@ -538,3 +567,44 @@ def try_count_flops(model: Union[tf.Module, tf.keras.Model],
           'reached before this run.', e)
       return None
   return None
+
+
+@ops.RegisterStatistics('Einsum', 'flops')
+def _einsum_flops(graph, node):
+  """Calculates the compute resources needed for Einsum."""
+  assert len(node.input) == 2
+  x_shape = tf.compat.v1.graph_util.tensor_shape_from_node_def_name(
+      graph, node.input[0])
+  y_shape = tf.compat.v1.graph_util.tensor_shape_from_node_def_name(
+      graph, node.input[1])
+  x_shape.assert_is_fully_defined()
+  y_shape.assert_is_fully_defined()
+  x_shape = x_shape.as_list()
+  y_shape = y_shape.as_list()
+  equation = str(node.attr['equation'])
+  equation = (
+      equation.replace('s:', '')
+      .replace('"', '')
+      .replace(' ', '')
+      .replace('\n', '')
+  )
+  x_str = equation.split(',')[0]
+  y_r_str = equation.split(',')[1]
+  y_str = y_r_str.split('->')[0]
+  r_str = y_r_str.split('->')[1]
+  shape_dic = {}
+  contracted = set()
+  for indice in x_str + y_str:
+    if indice in x_str:
+      indice_dim = x_shape[x_str.find(indice)]
+    elif indice in y_str:
+      indice_dim = y_shape[y_str.find(indice)]
+    else:
+      raise ValueError('indice {} not found in inputs'.format(indice))
+    shape_dic[indice] = indice_dim
+    if indice not in r_str:
+      contracted.add(indice)
+  madds = np.prod([shape_dic[indice] for indice in r_str]) * (
+      np.prod([shape_dic[indice] for indice in contracted]))
+  flops = 2 * madds
+  return ops.OpStats('flops', flops)

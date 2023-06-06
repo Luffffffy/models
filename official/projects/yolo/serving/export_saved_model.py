@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,9 +38,8 @@ from absl import flags
 
 from official.core import exp_factory
 from official.modeling import hyperparams
-from official.projects.yolo.configs import yolo as cfg  # pylint: disable=unused-import
+from official.projects.yolo.common import registry_imports  # pylint: disable=unused-import
 from official.projects.yolo.serving import export_module_factory
-from official.projects.yolo.tasks import yolo as task  # pylint: disable=unused-import
 from official.vision.serving import export_saved_model_lib
 
 FLAGS = flags.FLAGS

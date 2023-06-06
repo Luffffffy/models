@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -58,7 +58,7 @@ from official.nlp.modeling.layers.reuse_attention import ReuseMultiHeadAttention
 from official.nlp.modeling.layers.reuse_transformer import ReuseTransformer
 from official.nlp.modeling.layers.rezero_transformer import ReZeroTransformer
 from official.nlp.modeling.layers.routing import *
-from official.nlp.modeling.layers.self_attention_mask import SelfAttentionMask
+from official.nlp.modeling.layers.self_attention_mask import *
 from official.nlp.modeling.layers.spectral_normalization import *
 from official.nlp.modeling.layers.talking_heads_attention import TalkingHeadsAttention
 from official.nlp.modeling.layers.text_layers import BertPackInputs

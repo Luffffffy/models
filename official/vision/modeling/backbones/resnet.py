@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -179,10 +179,7 @@ class ResNet(tf.keras.Model):
     self._activation = activation
     self._norm_momentum = norm_momentum
     self._norm_epsilon = norm_epsilon
-    if use_sync_bn:
-      self._norm = layers.experimental.SyncBatchNormalization
-    else:
-      self._norm = layers.BatchNormalization
+    self._norm = layers.BatchNormalization
     self._kernel_initializer = kernel_initializer
     self._kernel_regularizer = kernel_regularizer
     self._bias_regularizer = bias_regularizer
@@ -238,6 +235,7 @@ class ResNet(tf.keras.Model):
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon,
           trainable=self._bn_trainable,
+          synchronized=self._use_sync_bn,
       )(x)
       x = tf_utils.get_activation(self._activation, use_keras_layer=True)(x)
     elif self._stem_type == 'v1':
@@ -256,6 +254,7 @@ class ResNet(tf.keras.Model):
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon,
           trainable=self._bn_trainable,
+          synchronized=self._use_sync_bn,
       )(x)
       x = tf_utils.get_activation(self._activation, use_keras_layer=True)(x)
       x = layers.Conv2D(
@@ -273,6 +272,7 @@ class ResNet(tf.keras.Model):
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon,
           trainable=self._bn_trainable,
+          synchronized=self._use_sync_bn,
       )(x)
       x = tf_utils.get_activation(self._activation, use_keras_layer=True)(x)
       x = layers.Conv2D(
@@ -290,6 +290,7 @@ class ResNet(tf.keras.Model):
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon,
           trainable=self._bn_trainable,
+          synchronized=self._use_sync_bn,
       )(x)
       x = tf_utils.get_activation(self._activation, use_keras_layer=True)(x)
     else:
@@ -311,6 +312,7 @@ class ResNet(tf.keras.Model):
           momentum=self._norm_momentum,
           epsilon=self._norm_epsilon,
           trainable=self._bn_trainable,
+          synchronized=self._use_sync_bn,
       )(x)
       x = tf_utils.get_activation(self._activation, use_keras_layer=True)(x)
     else:

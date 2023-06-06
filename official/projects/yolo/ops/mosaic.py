@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,9 +16,9 @@
 import random
 
 import tensorflow as tf
-import tensorflow_addons as tfa
 
 from official.projects.yolo.ops import preprocessing_ops
+from official.vision.ops import augment
 from official.vision.ops import box_ops
 from official.vision.ops import preprocess_ops
 
@@ -215,7 +215,9 @@ class Mosaic:
               -center[1], center[1], seed=self._seed))
 
       # clip the boxes to fit within the image
-      image = tfa.image.translate(image, [cw, ch], fill_value=self._pad_value)
+      image = augment.translate(
+          image, [cw, ch], fill_value=self._pad_value, fill_mode='constant'
+      )
       boxes = box_ops.denormalize_boxes(boxes, shape[:2])
       boxes = boxes + tf.cast([ch, cw, ch, cw], boxes.dtype)
       boxes = box_ops.clip_boxes(boxes, shape[:2])
@@ -454,7 +456,8 @@ class Mosaic:
 
   def _add_param(self, sample):
     """Add parameters to handle skipped images."""
-    sample['is_mosaic'] = tf.cast(0.0, tf.bool)
+    if 'is_mosaic' not in sample:
+      sample['is_mosaic'] = tf.cast(0.0, tf.bool)
     sample['num_detections'] = tf.shape(sample['groundtruth_boxes'])[0]
     return sample
 
@@ -478,9 +481,13 @@ class Mosaic:
 
     if self._mixup_frequency > 0:
       one = dataset.shuffle(
-          100, seed=self._seed + 4, reshuffle_each_iteration=True)
+          100, seed=self._seed + num_patches, reshuffle_each_iteration=True
+      )
       two = dataset.shuffle(
-          100, seed=self._seed + 5, reshuffle_each_iteration=True)
+          100,
+          seed=self._seed + num_patches + 1,
+          reshuffle_each_iteration=True,
+      )
       dataset = tf.data.Dataset.zip((one, two))
       dataset = dataset.map(
           self._mixup,

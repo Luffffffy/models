@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -110,6 +110,13 @@ class AttributeHead(hyperparams.Config):
   # prediction tower. If unspecified, they will use their individual prediction
   # tower.
   prediction_tower_name: str = ''
+  # If `num_convs` or `num_filters` are not provided, it will use the parameters
+  # from RetinaNetHead. When several attributes share the head through setting
+  # the same `prediction_tower_name`, we only respect `num_convs` and
+  # `num_filters` from the first attribute that use the shared prediction tower
+  # name.
+  num_convs: Optional[int] = None
+  num_filters: Optional[int] = None
 
 
 @dataclasses.dataclass
@@ -119,6 +126,7 @@ class RetinaNetHead(hyperparams.Config):
   use_separable_conv: bool = False
   attribute_heads: List[AttributeHead] = dataclasses.field(default_factory=list)
   share_classification_heads: bool = False
+  share_level_convs: Optional[bool] = True
 
 
 @dataclasses.dataclass
@@ -135,7 +143,8 @@ class DetectionGenerator(hyperparams.Config):
   # When nms_version = `tflite`, values from tflite_post_processing need to be
   # specified. They are compatible with the input arguments used by TFLite
   # custom NMS op and override above parameters.
-  tflite_post_processing: common.TFLitePostProcessingConfig = common.TFLitePostProcessingConfig(
+  tflite_post_processing: common.TFLitePostProcessingConfig = (
+      common.TFLitePostProcessingConfig()
   )
   # Return decoded boxes/scores even if apply_nms is set `True`.
   return_decoded: Optional[bool] = None
@@ -164,6 +173,7 @@ class ExportConfig(hyperparams.Config):
   output_normalized_coordinates: bool = False
   cast_num_detections_to_float: bool = False
   cast_detection_classes_to_float: bool = False
+  output_intermediate_features: bool = False
 
 
 @dataclasses.dataclass

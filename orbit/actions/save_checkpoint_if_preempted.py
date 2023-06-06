@@ -1,4 +1,4 @@
-# Copyright 2022 The Orbit Authors. All Rights Reserved.
+# Copyright 2023 The Orbit Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -57,6 +57,6 @@ class SaveCheckpointIfPreempted:
     )
 
   def __call__(self, _) -> None:
-    self._preemption_handler._save_checkpoint_if_preempted(
+    self._preemption_handler.save_checkpoint_if_preempted(
         checkpoint_number=self._checkpoint_number, check_interval=False
     )

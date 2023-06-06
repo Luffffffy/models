@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,7 +64,7 @@ class PerClassIoU(tf.keras.metrics.MeanIoU):
 class PerClassIoUV2(tf.keras.metrics.Metric):
   """Computes the per-class Intersection-Over-Union metric.
 
-  This implementation converts predictions and ground truth to binary masks,
+  This implementation converts predictions and ground-truth to binary masks,
   and uses logical AND and OR to compute intersection and union, which is much
   faster than the PerClassIoU (using confusion matrix) above on TPU, but slower
   on CPU and GPU.
@@ -110,8 +110,10 @@ class PerClassIoUV2(tf.keras.metrics.Metric):
 
   def reset_state(self):
     """Resets all of the metric state variables."""
-    for v in self.variables:
-      tf.keras.backend.set_value(v, np.zeros(v.shape))
+    self.intersection_per_class.assign(
+        tf.zeros_like(self.intersection_per_class)
+    )
+    self.union_per_class.assign(tf.zeros_like(self.union_per_class))
 
   def update_state(self, y_true: tf.Tensor, y_pred: tf.Tensor):
     """Updates metric state by accumulating the variables.

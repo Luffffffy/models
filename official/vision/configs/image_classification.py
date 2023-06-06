@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ class DataConfig(cfg.DataConfig):
   crop_area_range: Optional[Tuple[float, float]] = (0.08, 1.0)
   aug_type: Optional[
       common.Augmentation] = None  # Choose from AutoAugment and RandAugment.
+  three_augment: bool = False
   color_jitter: float = 0.
   random_erasing: Optional[common.RandomErasing] = None
   file_type: str = 'tfrecord'
@@ -53,6 +54,14 @@ class DataConfig(cfg.DataConfig):
   # Keep for backward compatibility.
   aug_policy: Optional[str] = None  # None, 'autoaug', or 'randaug'.
   randaug_magnitude: Optional[int] = 10
+  # Determines ratio between the side of the cropped image and the short side of
+  # the original image.
+  center_crop_fraction: Optional[float] = 0.875
+  # Interpolation method for resizing image in Parser for both training and eval
+  tf_resize_method: str = 'bilinear'
+  # Repeat augmentation puts multiple augmentations of the same image in a batch
+  # https://arxiv.org/abs/1902.05509
+  repeated_augment: Optional[int] = None
 
 
 @dataclasses.dataclass
@@ -79,6 +88,9 @@ class Losses(hyperparams.Config):
   label_smoothing: float = 0.0
   l2_weight_decay: float = 0.0
   soft_labels: bool = False
+  # Converts multi-class classification to multi-label classification. Weights
+  # each object class equally in the loss function, ignoring their size.
+  use_binary_cross_entropy: bool = False
 
 
 @dataclasses.dataclass
@@ -96,6 +108,10 @@ class ImageClassificationTask(cfg.TaskConfig):
   validation_data: DataConfig = DataConfig(is_training=False)
   losses: Losses = Losses()
   evaluation: Evaluation = Evaluation()
+  train_input_partition_dims: Optional[List[int]] = dataclasses.field(
+      default_factory=list)
+  eval_input_partition_dims: Optional[List[int]] = dataclasses.field(
+      default_factory=list)
   init_checkpoint: Optional[str] = None
   init_checkpoint_modules: str = 'all'  # all or backbone
   model_output_keys: Optional[List[int]] = dataclasses.field(

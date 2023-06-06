@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -851,14 +851,10 @@ def _generate_detections_tflite(
   config.update({'num_classes': num_classes})
 
   for i in range(min_level, max_level + 1):
-    scores.append(
-        tf.sigmoid(
-            tf.reshape(raw_scores[str(i)], [batch_size, -1, num_classes])
-        )
-    )
+    scores.append(tf.reshape(raw_scores[str(i)], [batch_size, -1, num_classes]))
     boxes.append(tf.reshape(raw_boxes[str(i)], [batch_size, -1, 4]))
     anchors.append(tf.reshape(anchor_boxes[str(i)], [-1, 4]))
-  scores = tf.concat(scores, 1)
+  scores = tf.sigmoid(tf.concat(scores, 1))
   boxes = tf.concat(boxes, 1)
   anchors = tf.concat(anchors, 0)
 
@@ -893,6 +889,11 @@ def _generate_detections_tflite(
     num_detections = tf.constant(0.0, dtype=tf.float32, name='num_detections')
     return boxes, classes, scores, num_detections
 
+  if config.get('omit_nms', False):
+    dummy_classes = tf.constant(0.0, dtype=tf.float32, name='classes')
+    dummy_num_detections = tf.constant(
+        0.0, dtype=tf.float32, name='num_detections')
+    return boxes, dummy_classes, scores, dummy_num_detections
   return dummy_post_processing(boxes, scores, anchors)[::-1]
 
 
@@ -1020,10 +1021,11 @@ class DetectionGenerator(tf.keras.layers.Layer):
         raw_boxes, anchor_boxes, weights=regression_weights
     )
 
-    # Box clipping
-    decoded_boxes = box_ops.clip_boxes(
-        decoded_boxes, tf.expand_dims(image_shape, axis=1)
-    )
+    # Box clipping.
+    if image_shape is not None:
+      decoded_boxes = box_ops.clip_boxes(
+          decoded_boxes, tf.expand_dims(image_shape, axis=1)
+      )
 
     if bbox_per_class:
       decoded_boxes = tf.reshape(
@@ -1258,7 +1260,10 @@ class MultilevelDetectionGenerator(tf.keras.layers.Layer):
       boxes_i = box_ops.decode_boxes(raw_boxes_i, anchor_boxes_i)
 
       # Box clipping.
-      boxes_i = box_ops.clip_boxes(boxes_i, tf.expand_dims(image_shape, axis=1))
+      if image_shape is not None:
+        boxes_i = box_ops.clip_boxes(
+            boxes_i, tf.expand_dims(image_shape, axis=1)
+        )
 
       boxes.append(boxes_i)
       scores.append(scores_i)
@@ -1310,7 +1315,10 @@ class MultilevelDetectionGenerator(tf.keras.layers.Layer):
     levels = list(raw_boxes.keys())
     min_level = int(min(levels))
     max_level = int(max(levels))
-    clip_shape = tf.expand_dims(tf.expand_dims(image_shape, axis=1), axis=1)
+    if image_shape is not None:
+      clip_shape = tf.expand_dims(tf.expand_dims(image_shape, axis=1), axis=1)
+    else:
+      clip_shape = None
     for i in range(max_level, min_level - 1, -1):
       (
           batch_size,
@@ -1330,13 +1338,15 @@ class MultilevelDetectionGenerator(tf.keras.layers.Layer):
           unsharded_w * num_anchors_per_locations,
           4,
       ]
-      decoded_boxes = box_ops.clip_boxes(
-          box_ops.decode_boxes(
-              tf.reshape(raw_boxes[str(i)], boxes_shape),
-              tf.reshape(anchor_boxes[str(i)], boxes_shape),
-          ),
-          clip_shape,
+      decoded_boxes = box_ops.decode_boxes(
+          tf.reshape(raw_boxes[str(i)], boxes_shape),
+          tf.reshape(anchor_boxes[str(i)], boxes_shape),
       )
+      if clip_shape is not None:
+        decoded_boxes = box_ops.clip_boxes(
+            decoded_boxes,
+            clip_shape,
+        )
       for raw_scores_i, decoded_boxes_i in edgetpu.shard_tensors(
           1, block, (raw_scores[str(i)], decoded_boxes)
       ):

@@ -1,4 +1,4 @@
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
+# Copyright 2023 The TensorFlow Authors. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -38,6 +38,11 @@ flags.DEFINE_integer(
     default=None,
     help='The number of total training steps for the pretraining job.')
 
+flags.DEFINE_bool(
+    'enable_async_checkpointing',
+    default=True,
+    help='A boolean indicating whether to enable async checkpoint saving')
+
 
 def _run_experiment_with_preemption_recovery(params, model_dir):
   """Runs experiment and tries to reconnect when encounting a preemption."""
@@ -53,18 +58,22 @@ def _run_experiment_with_preemption_recovery(params, model_dir):
           **params.runtime.model_parallelism())
       with distribution_strategy.scope():
         task = task_factory.get_task(params.task, logging_dir=model_dir)
-      preemption_watcher = tf.distribute.experimental.PreemptionWatcher()
+      # pylint: disable=line-too-long
+      preemption_watcher = None  # copybara-replace
+      # pylint: enable=line-too-long
 
       train_lib.run_experiment(
           distribution_strategy=distribution_strategy,
           task=task,
           mode=FLAGS.mode,
           params=params,
-          model_dir=model_dir)
+          model_dir=model_dir,
+          enable_async_checkpointing=FLAGS.enable_async_checkpointing)
 
       keep_training = False
     except tf.errors.OpError as e:
       if preemption_watcher and preemption_watcher.preemption_message:
+        preemption_watcher.block_until_worker_exit()
         logging.info(
             'Some TPU workers had been preempted (message: %s), '
             'retarting training from the last checkpoint...',

@@ -14,7 +14,7 @@
 
 """TFDS detection decoders."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.vision.dataloaders import decoder
 
 
@@ -56,5 +56,6 @@ class MSCOCODecoder(decoder.Decoder):
 TFDS_ID_TO_DECODER_MAP = {
     'coco/2017': MSCOCODecoder,
     'coco/2014': MSCOCODecoder,
-    'coco': MSCOCODecoder
+    'coco': MSCOCODecoder,
+    'scenic:objects365': MSCOCODecoder,
 }

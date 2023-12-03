@@ -23,7 +23,7 @@ from absl import flags
 from absl import logging
 
 import gin
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import distribute_utils
 # Imports registered experiment configs.
@@ -55,6 +55,12 @@ _MODE = flags.DEFINE_enum(
     'on the prediction data; if `train_eval`, it will only '
     'run training and evaluation; if `predict`, it will only '
     'run prediction using the model in `model_dir`.')
+
+# TODO(kitsing) The `params_override` flag is currently not being used.
+# Only declared to make xm_job_3p.XMTPUJob happy.
+_PARAMS_OVERRIDE = flags.DEFINE_string(
+    'params_override', '', 'Overridden parameters.'
+)
 
 FLAGS = flags.FLAGS
 

@@ -15,7 +15,7 @@
 """Customized optimizer to match paper results."""
 
 import dataclasses
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.modeling import optimization
 from official.nlp import optimization as nlp_optimization
 
@@ -27,7 +27,9 @@ class DETRAdamWConfig(optimization.AdamWeightDecayConfig):
 
 @dataclasses.dataclass
 class OptimizerConfig(optimization.OptimizerConfig):
-  detr_adamw: DETRAdamWConfig = DETRAdamWConfig()
+  detr_adamw: DETRAdamWConfig = dataclasses.field(
+      default_factory=DETRAdamWConfig
+  )
 
 
 @dataclasses.dataclass
@@ -41,7 +43,9 @@ class OptimizationConfig(optimization.OptimizationConfig):
     learning_rate: learning rate oneof config.
     warmup: warmup oneof config.
   """
-  optimizer: OptimizerConfig = OptimizerConfig()
+  optimizer: OptimizerConfig = dataclasses.field(
+      default_factory=OptimizerConfig
+  )
 
 
 # TODO(frederickliu): figure out how to make this configuable.

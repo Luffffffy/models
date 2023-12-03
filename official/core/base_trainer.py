@@ -23,7 +23,7 @@ from typing import Union, Optional
 from absl import logging
 import gin
 import orbit
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import base_task
 from official.core import config_definitions
@@ -47,10 +47,19 @@ class _AsyncTrainer(orbit.StandardTrainer, orbit.StandardEvaluator):
           tf.distribute.experimental.coordinator.ClusterCoordinator(
               self._strategy))
 
+  def coordinator_for_async(
+      self,
+  ) -> tf.distribute.experimental.coordinator.ClusterCoordinator:
+    if not self._coordinator:
+      raise ValueError(
+          "Coordinator uninitialized for async run. Call init_async() first."
+      )
+    return self._coordinator
+
   def join(self):
     """Join all async steps. Only useful in aysnc training."""
     if getattr(self, "_is_async", False):
-      self._coordinator.join()
+      self.coordinator_for_async().join()
 
   def create_train_loop_fn(self):
     """Creates a eval loop from the given step function and options."""
@@ -58,7 +67,9 @@ class _AsyncTrainer(orbit.StandardTrainer, orbit.StandardEvaluator):
     if getattr(self, "_is_async", False):
 
       def _async_loop_fn(iterator, num_steps):
-        self._coordinator.schedule(train_loop_fn, args=(iterator, num_steps))
+        self.coordinator_for_async().schedule(
+            train_loop_fn, args=(iterator, num_steps)
+        )
 
       return _async_loop_fn
     else:
@@ -76,7 +87,9 @@ class _AsyncTrainer(orbit.StandardTrainer, orbit.StandardEvaluator):
       def _async_loop_fn(iterator, num_steps, state=None, reduce_fn=None):
         assert state is None
         assert reduce_fn is None
-        self._coordinator.schedule(eval_loop_fn, args=(iterator, num_steps))
+        self.coordinator_for_async().schedule(
+            eval_loop_fn, args=(iterator, num_steps)
+        )
 
       return _async_loop_fn
     else:
@@ -102,7 +115,9 @@ class _AsyncTrainer(orbit.StandardTrainer, orbit.StandardEvaluator):
           *args, **kwargs)
       per_worker_dataset_fn = tf.function(per_worker_dataset_fn)
 
-      return self._coordinator.create_per_worker_dataset(per_worker_dataset_fn)
+      return self.coordinator_for_async().create_per_worker_dataset(
+          per_worker_dataset_fn
+      )
     else:
       return orbit.utils.make_distributed_dataset(self._strategy, dataset_or_fn,
                                                   *args, **kwargs)
@@ -127,7 +142,7 @@ class Trainer(_AsyncTrainer):
       self,
       config: ExperimentConfig,
       task: base_task.Task,
-      model: tf.keras.Model,
+      model: tf_keras.Model,
       optimizer: tf.optimizers.Optimizer,
       train: bool = True,
       evaluate: bool = True,
@@ -141,7 +156,7 @@ class Trainer(_AsyncTrainer):
     Args:
       config: An `ExperimentConfig` instance specifying experiment config.
       task: A base_task.Task instance.
-      model: The model instance, e.g. a tf.keras.Model instance.
+      model: The model instance, e.g. a tf_keras.Model instance.
       optimizer: tf.optimizers.Optimizer instance.
       train: bool, whether or not this trainer will be used for training.
         default to True.
@@ -192,8 +207,8 @@ class Trainer(_AsyncTrainer):
         optimizer=self.optimizer,
         **checkpoint_items)
 
-    self._train_loss = tf.keras.metrics.Mean("training_loss", dtype=tf.float32)
-    self._validation_loss = tf.keras.metrics.Mean(
+    self._train_loss = tf_keras.metrics.Mean("training_loss", dtype=tf.float32)
+    self._validation_loss = tf_keras.metrics.Mean(
         "validation_loss", dtype=tf.float32)
     model_metrics = model.metrics if hasattr(model, "metrics") else []
 
@@ -352,7 +367,10 @@ class Trainer(_AsyncTrainer):
     This method provides a way to control how to fetch the next model input, and
     what data to send to the model.
 
-    This function runs in eager mode.
+    Note: This function runs on the host side when accelerators are used.
+
+    Note: Depending on the training setup this may or may not run in eager mode.
+    In most cases it will be run in graph mode.
 
     Args:
       iterator: Dataset iterator to generate the next inputs from.
@@ -399,7 +417,10 @@ class Trainer(_AsyncTrainer):
     processed later in `aggregate_logs`. This is useful for sending extra logs
     downstream that are not compatible with the accelerators.
 
-    This function runs in eager mode.
+    Note: This function runs on the host side when accelerators are used.
+
+    Note: Depending on the training setup this may or may not run in eager mode.
+    In most cases it will be run in graph mode.
 
     Args:
       iterator: Dataset iterator to generate the next inputs from.

@@ -17,7 +17,7 @@
 
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.vision.modeling.layers import detection_generator
 from official.vision.ops import anchor
@@ -348,6 +348,7 @@ class MultilevelDetectionGeneratorTest(
         'tflite_post_processing_config': tflite_post_processing_config,
         'return_decoded': False,
         'use_class_agnostic_nms': False,
+        'box_coder_weights': None,
     }
     generator = detection_generator.MultilevelDetectionGenerator(**kwargs)
 

@@ -17,7 +17,7 @@
 from absl import logging
 from absl.testing import parameterized
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.yolo.losses import yolov7_loss
 from official.projects.yolo.ops import box_ops
@@ -91,6 +91,7 @@ class YoloV7LossTest(parameterized.TestCase, tf.test.TestCase):
     loss = yolov7_loss.YoloV7Loss(
         anchors=self._anchors,
         strides=self._strides,
+        input_size=[_HEIGHT, _WIDTH],
         gamma=gamma,
         label_smoothing=label_smoothing,
         num_classes=_NUM_CLASSES,
@@ -119,6 +120,7 @@ class YoloV7LossTest(parameterized.TestCase, tf.test.TestCase):
     loss = yolov7_loss.YoloV7LossOTA(
         anchors=self._anchors,
         strides=self._strides,
+        input_size=[_HEIGHT, _WIDTH],
         gamma=gamma,
         label_smoothing=label_smoothing,
         num_classes=_NUM_CLASSES,

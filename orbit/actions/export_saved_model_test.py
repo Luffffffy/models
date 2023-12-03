@@ -17,8 +17,9 @@
 import os
 
 from orbit import actions
+from orbit.actions import export_saved_model
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 def _id_key(name):
@@ -219,6 +220,10 @@ class ExportSavedModelTest(tf.test.TestCase):
     self.assertLen(file_manager.managed_files, 2)  # Still 2, due to clean up.
     reloaded_model = tf.saved_model.load(file_manager.managed_files[-1])
     self.assertEqual(reloaded_model(), 7)
+
+  def test_safe_normpath_gs(self):
+    path = export_saved_model.safe_normpath('gs://foo//bar')
+    self.assertEqual(path, 'gs://foo/bar')
 
 
 if __name__ == '__main__':

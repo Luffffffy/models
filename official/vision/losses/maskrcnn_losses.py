@@ -15,7 +15,7 @@
 """Losses for maskrcnn model."""
 
 # Import libraries
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 
 class RpnScoreLoss(object):
@@ -23,8 +23,8 @@ class RpnScoreLoss(object):
 
   def __init__(self, rpn_batch_size_per_im):
     self._rpn_batch_size_per_im = rpn_batch_size_per_im
-    self._binary_crossentropy = tf.keras.losses.BinaryCrossentropy(
-        reduction=tf.keras.losses.Reduction.SUM, from_logits=True)
+    self._binary_crossentropy = tf_keras.losses.BinaryCrossentropy(
+        reduction=tf_keras.losses.Reduction.SUM, from_logits=True)
 
   def __call__(self, score_outputs, labels):
     """Computes total RPN detection loss.
@@ -86,8 +86,8 @@ class RpnBoxLoss(object):
     # The delta is typically around the mean value of regression target.
     # for instances, the regression targets of 512x512 input with 6 anchors on
     # P2-P6 pyramid is about [0.1, 0.1, 0.2, 0.2].
-    self._huber_loss = tf.keras.losses.Huber(
-        delta=huber_loss_delta, reduction=tf.keras.losses.Reduction.SUM)
+    self._huber_loss = tf_keras.losses.Huber(
+        delta=huber_loss_delta, reduction=tf_keras.losses.Reduction.SUM)
 
   def __call__(self, box_outputs, labels):
     """Computes total RPN detection loss.
@@ -136,8 +136,16 @@ class RpnBoxLoss(object):
           box_targets, box_outputs, sample_weight=valid_mask)
       # The loss is normalized by the sum of non-zero weights and additional
       # normalizer provided by the function caller. Using + 0.01 here to avoid
-      # division by zero.
-      box_loss /= normalizer * (tf.reduce_sum(valid_mask) + 0.01)
+      # division by zero. For each replica, get the sum of non-zero masks. Then
+      # get the mean of sums from all replicas. Note there is an extra division
+      # by `num_replicas` in train_step(). So it is equivalent to normalizing
+      # the box loss by the global sum of non-zero masks.
+      replica_context = tf.distribute.get_replica_context()
+      valid_mask = tf.reduce_sum(valid_mask)
+      valid_mask_mean = replica_context.all_reduce(
+          tf.distribute.ReduceOp.MEAN, valid_mask
+      )
+      box_loss /= normalizer * (valid_mask_mean + 0.01)
       return box_loss
 
 
@@ -159,26 +167,40 @@ class FastrcnnClassLoss(object):
     self._use_binary_cross_entropy = use_binary_cross_entropy
     self._top_k_percent = top_k_percent
 
-  def __call__(self, class_outputs, class_targets):
+  def __call__(self, class_outputs, class_targets, class_weights=None):
     """Computes the class loss (Fast-RCNN branch) of Mask-RCNN.
 
     This function implements the classification loss of the Fast-RCNN.
 
     The classification loss is categorical (or binary) cross entropy on all
     RoIs.
-    Reference: https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/fast_rcnn_heads.py  # pylint: disable=line-too-long
+    Reference:
+    https://github.com/facebookresearch/Detectron/blob/master/detectron/modeling/fast_rcnn_heads.py
+    # pylint: disable=line-too-long
 
     Args:
       class_outputs: a float tensor representing the class prediction for each
         box with a shape of [batch_size, num_boxes, num_classes].
       class_targets: a float tensor representing the class label for each box
         with a shape of [batch_size, num_boxes].
+      class_weights: A float list containing the weight of each class.
 
     Returns:
       a scalar tensor representing total class loss.
     """
     with tf.name_scope('fast_rcnn_loss'):
+      output_dtype = class_outputs.dtype
       num_classes = class_outputs.get_shape().as_list()[-1]
+      class_weights = (
+          class_weights if class_weights is not None else [1.0] * num_classes
+      )
+      if num_classes != len(class_weights):
+        raise ValueError(
+            'Length of class_weights should be {}'.format(num_classes)
+        )
+
+      class_weights = tf.constant(class_weights, dtype=output_dtype)
+
       class_targets_one_hot = tf.one_hot(
           tf.cast(class_targets, dtype=tf.int32),
           num_classes,
@@ -187,10 +209,15 @@ class FastrcnnClassLoss(object):
         # (batch_size, num_boxes, num_classes)
         cross_entropy_loss = tf.nn.sigmoid_cross_entropy_with_logits(
             labels=class_targets_one_hot, logits=class_outputs)
+        cross_entropy_loss *= class_weights
       else:
         # (batch_size, num_boxes)
         cross_entropy_loss = tf.nn.softmax_cross_entropy_with_logits(
             labels=class_targets_one_hot, logits=class_outputs)
+        class_weight_mask = tf.einsum(
+            '...y,y->...', class_targets_one_hot, class_weights
+        )
+        cross_entropy_loss *= class_weight_mask
 
       if self._top_k_percent < 1.0:
         return self.aggregate_loss_top_k(cross_entropy_loss)
@@ -234,8 +261,8 @@ class FastrcnnBoxLoss(object):
       class_agnostic_bbox_pred: if True, class agnostic bounding box prediction
         is performed.
     """
-    self._huber_loss = tf.keras.losses.Huber(
-        delta=huber_loss_delta, reduction=tf.keras.losses.Reduction.SUM)
+    self._huber_loss = tf_keras.losses.Huber(
+        delta=huber_loss_delta, reduction=tf_keras.losses.Reduction.SUM)
     self._class_agnostic_bbox_pred = class_agnostic_bbox_pred
 
   def __call__(self, box_outputs, class_targets, box_targets):
@@ -291,8 +318,16 @@ class FastrcnnBoxLoss(object):
       box_loss = self._huber_loss(box_targets, box_outputs, sample_weight=mask)
       # The loss is normalized by the number of ones in mask,
       # additional normalizer provided by the user and using 0.01 here to avoid
-      # division by 0.
-      box_loss /= normalizer * (tf.reduce_sum(mask) + 0.01)
+      # division by 0. For each replica, get the sum of non-zero masks. Then
+      # get the mean of sums from all replicas. Note there is an extra division
+      # by `num_replicas` in train_step(). So it is equivalent to normalizing
+      # the box loss by the global sum of non-zero masks.
+      replica_context = tf.distribute.get_replica_context()
+      mask = tf.reduce_sum(mask)
+      mask_mean = replica_context.all_reduce(
+          tf.distribute.ReduceOp.MEAN, mask
+      )
+      box_loss /= normalizer * (mask_mean + 0.01)
       return box_loss
 
 
@@ -300,8 +335,8 @@ class MaskrcnnLoss(object):
   """Mask R-CNN instance segmentation mask loss function."""
 
   def __init__(self):
-    self._binary_crossentropy = tf.keras.losses.BinaryCrossentropy(
-        reduction=tf.keras.losses.Reduction.SUM, from_logits=True)
+    self._binary_crossentropy = tf_keras.losses.BinaryCrossentropy(
+        reduction=tf_keras.losses.Reduction.SUM, from_logits=True)
 
   def __call__(self, mask_outputs, mask_targets, select_class_targets):
     """Computes the mask loss of Mask-RCNN.
@@ -341,7 +376,15 @@ class MaskrcnnLoss(object):
       mask_outputs = tf.expand_dims(mask_outputs, axis=-1)
       mask_loss = self._binary_crossentropy(mask_targets, mask_outputs,
                                             sample_weight=weights)
-
+      # For each replica, get the sum of non-zero weights. Then get the mean of
+      # sums from all replicas. Note there is an extra division by
+      # `num_replicas` in train_step(). So it is equivalent to normalizing the
+      # mask loss by the global sum of non-zero weights.
+      replica_context = tf.distribute.get_replica_context()
+      weights = tf.reduce_sum(weights)
+      weights_mean = replica_context.all_reduce(
+          tf.distribute.ReduceOp.MEAN, weights
+      )
       # The loss is normalized by the number of 1's in weights and
       # + 0.01 is used to avoid division by zero.
-      return mask_loss / (tf.reduce_sum(weights) + 0.01)
+      return mask_loss / (weights_mean + 0.01)

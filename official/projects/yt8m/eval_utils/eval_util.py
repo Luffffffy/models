@@ -15,7 +15,7 @@
 """Provides functions to help with evaluating models."""
 import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 from official.projects.yt8m.eval_utils import average_precision_calculator as ap_calculator
 from official.projects.yt8m.eval_utils import mean_average_precision_calculator as map_calculator
 
@@ -241,12 +241,14 @@ class EvaluationMetrics(object):
     aps = self.map_calculator.peek_map_at_n()
     mean_ap = sum(aps) / self.num_class
     gap = self.global_ap_calculator.peek_ap_at_n()
+    lw_map = self.map_calculator.peek_log_weighted_map_at_n()
 
     epoch_info_dict = {
         "avg_hit_at_one": avg_hit_at_one,
         "avg_perr": avg_perr,
         "map": mean_ap,
-        "gap": gap
+        "gap": gap,
+        "lw_map": lw_map
     }
 
     if return_per_class_ap:

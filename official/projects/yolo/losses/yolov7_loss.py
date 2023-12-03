@@ -14,7 +14,7 @@
 
 """YOLOv7 loss function."""
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.projects.yolo.ops import box_ops
 from official.vision.losses import focal_loss
@@ -46,13 +46,14 @@ def merge_labels(labels):
   return tf.concat([classes[..., None], boxes], axis=-1)
 
 
-class YoloV7Loss(tf.keras.losses.Loss):
+class YoloV7Loss(tf_keras.losses.Loss):
   """YOLOv7 loss function."""
 
   def __init__(
       self,
       anchors,
       strides,
+      input_size,
       alpha=0.25,
       gamma=1.5,
       box_weight=0.05,
@@ -63,7 +64,7 @@ class YoloV7Loss(tf.keras.losses.Loss):
       iou_mix_ratio=1.0,
       num_classes=80,
       auto_balance=False,
-      reduction=tf.keras.losses.Reduction.NONE,
+      reduction=tf_keras.losses.Reduction.NONE,
       name=None,
   ):
     """Constructor for YOLOv7 loss.
@@ -77,6 +78,7 @@ class YoloV7Loss(tf.keras.losses.Loss):
         be a power of 2, and they usually start with level 3 and end at level
         5 or 7. Therefore, the list should usually be [8, 16, 32] or
         [8, 16, 32, 64, 128].
+      input_size: a list containing the height and width of the input image.
       alpha: alpha for focal loss.
       gamma: gamma for focal loss. If set to 0, focal loss will be disabled.
       box_weight: float weight scalar applied to bounding box loss.
@@ -103,6 +105,7 @@ class YoloV7Loss(tf.keras.losses.Loss):
     self._num_anchors = len(anchors[0])
     self._anchors = anchors
     self._strides = strides
+    self._input_size = input_size
     self._iou_mix_ratio = iou_mix_ratio
 
     # Scale down anchors by the strides to match the feature map.
@@ -123,8 +126,8 @@ class YoloV7Loss(tf.keras.losses.Loss):
 
     # Weight to combine losses
     self._box_weight = box_weight
-    self._obj_weight = obj_weight
-    self._cls_weight = cls_weight
+    self._obj_weight = obj_weight * input_size[0] / 640 * input_size[1] / 640
+    self._cls_weight = cls_weight * num_classes / 80
 
     # Layer balance scalar
     self._balance = _LAYER_BALANCE[str(self._num_layers)][:]
@@ -394,13 +397,14 @@ class YoloV7Loss(tf.keras.losses.Loss):
         'balance': self._balance,
         'strides': self._strides,
         'anchors': self._anchors,
+        'input_size': self._input_size,
         'anchor_threshold': self._anchor_threshold,
     }
     base_config = super().get_config()
     return dict(list(base_config.items()) + list(config.items()))
 
 
-class YoloV7LossOTA(tf.keras.losses.Loss):
+class YoloV7LossOTA(tf_keras.losses.Loss):
   """YOLOv7 loss function with OTA.
 
   OTA (Optimal Transport Assignment) uses Sinkhorn-Knopp algorithm to copmute
@@ -413,6 +417,7 @@ class YoloV7LossOTA(tf.keras.losses.Loss):
       self,
       anchors,
       strides,
+      input_size,
       alpha=0.25,
       gamma=1.5,
       box_weight=0.05,
@@ -424,7 +429,7 @@ class YoloV7LossOTA(tf.keras.losses.Loss):
       iou_mix_ratio=1.0,
       num_classes=80,
       auto_balance=False,
-      reduction=tf.keras.losses.Reduction.NONE,
+      reduction=tf_keras.losses.Reduction.NONE,
       name=None,
   ):
     """Constructor for YOLOv7 loss OTA.
@@ -438,6 +443,7 @@ class YoloV7LossOTA(tf.keras.losses.Loss):
         be a power of 2, and they usually start with level 3 and end at level 5
         or 7. Therefore, the list should usually be [8, 16, 32] or [8, 16, 32,
         64, 128].
+      input_size: a list containing the height and width of the input image.
       alpha: alpha for focal loss.
       gamma: gamma for focal loss. If set to 0, focal loss will be disabled.
       box_weight: float weight scalar applied to bounding box loss.
@@ -466,6 +472,7 @@ class YoloV7LossOTA(tf.keras.losses.Loss):
     self._num_anchors = len(anchors[0])
     self._anchors = []
     self._strides = strides
+    self._input_size = input_size
     self._iou_mix_ratio = iou_mix_ratio
 
     # Scale down anchors by the strides to match the feature map.
@@ -486,8 +493,8 @@ class YoloV7LossOTA(tf.keras.losses.Loss):
 
     # Weight to combine losses
     self._box_weight = box_weight
-    self._obj_weight = obj_weight
-    self._cls_weight = cls_weight
+    self._obj_weight = obj_weight * input_size[0] / 640 * input_size[1] / 640
+    self._cls_weight = cls_weight * num_classes / 80
 
     # Weight to construct cost matrix
     self._iou_weight = iou_weight
@@ -940,6 +947,7 @@ class YoloV7LossOTA(tf.keras.losses.Loss):
         'balance': self._balance,
         'strides': self._strides,
         'anchors': self._anchors,
+        'input_size': self._input_size,
         'anchor_threshold': self._anchor_threshold,
     }
     base_config = super().get_config()

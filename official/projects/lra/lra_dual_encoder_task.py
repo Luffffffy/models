@@ -12,19 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Copyright 2022 The TensorFlow Authors. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 """Trainer network for dual encoder style models."""
 # pylint: disable=g-classes-have-attributes
 import dataclasses
@@ -35,7 +22,7 @@ import numpy as np
 import orbit
 from scipy import stats
 from sklearn import metrics as sklearn_metrics
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.core import base_task
 from official.core import config_definitions as cfg
@@ -111,7 +98,7 @@ class DualEncoderTask(base_task.Task):
         network=encoder_network,
         max_seq_length=self.task_config.model.max_seq_length,
         num_classes=self.task_config.model.num_classes,
-        initializer=tf.keras.initializers.TruncatedNormal(
+        initializer=tf_keras.initializers.TruncatedNormal(
             stddev=encoder_cfg.initializer_range
         ),
         use_encoder_pooler=self.task_config.model.use_encoder_pooler,
@@ -121,9 +108,9 @@ class DualEncoderTask(base_task.Task):
   def build_losses(self, labels, model_outputs, aux_losses=None) -> tf.Tensor:
     label_ids = labels[self.label_field]
     if self.task_config.model.num_classes == 1:
-      loss = tf.keras.losses.mean_squared_error(label_ids, model_outputs)
+      loss = tf_keras.losses.mean_squared_error(label_ids, model_outputs)
     else:
-      loss = tf.keras.losses.sparse_categorical_crossentropy(
+      loss = tf_keras.losses.sparse_categorical_crossentropy(
           label_ids, tf.cast(model_outputs, tf.float32), from_logits=True
       )
 
@@ -163,15 +150,15 @@ class DualEncoderTask(base_task.Task):
   def build_metrics(self, training=None):
     del training
     if self.task_config.model.num_classes == 1:
-      metrics = [tf.keras.metrics.MeanSquaredError()]
+      metrics = [tf_keras.metrics.MeanSquaredError()]
     elif self.task_config.model.num_classes == 2:
       metrics = [
-          tf.keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
-          tf.keras.metrics.AUC(name='auc', curve='PR'),
+          tf_keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
+          tf_keras.metrics.AUC(name='auc', curve='PR'),
       ]
     else:
       metrics = [
-          tf.keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
+          tf_keras.metrics.SparseCategoricalAccuracy(name='cls_accuracy'),
       ]
     return metrics
 
@@ -189,7 +176,7 @@ class DualEncoderTask(base_task.Task):
   def process_compiled_metrics(self, compiled_metrics, labels, model_outputs):
     compiled_metrics.update_state(labels[self.label_field], model_outputs)
 
-  def validation_step(self, inputs, model: tf.keras.Model, metrics=None):
+  def validation_step(self, inputs, model: tf_keras.Model, metrics=None):
     features, labels = inputs, inputs
     outputs = self.inference_step(features, model)
     loss = self.build_losses(
@@ -289,7 +276,7 @@ class DualEncoderTask(base_task.Task):
 def predict(
     task: DualEncoderTask,
     params: cfg.DataConfig,
-    model: tf.keras.Model,
+    model: tf_keras.Model,
     params_aug: Optional[cfg.DataConfig] = None,
     test_time_aug_wgt: float = 0.3,
 ) -> List[Union[int, float]]:

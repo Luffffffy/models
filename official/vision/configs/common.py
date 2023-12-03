@@ -49,8 +49,12 @@ class DataDecoder(hyperparams.OneOfConfig):
     label_map_decoder: TF Example decoder with label map config.
   """
   type: Optional[str] = 'simple_decoder'
-  simple_decoder: TfExampleDecoder = TfExampleDecoder()
-  label_map_decoder: TfExampleDecoderLabelMap = TfExampleDecoderLabelMap()
+  simple_decoder: TfExampleDecoder = dataclasses.field(
+      default_factory=TfExampleDecoder
+  )
+  label_map_decoder: TfExampleDecoderLabelMap = dataclasses.field(
+      default_factory=TfExampleDecoderLabelMap
+  )
 
 
 @dataclasses.dataclass
@@ -106,8 +110,8 @@ class Augmentation(hyperparams.OneOfConfig):
     autoaug: AutoAugment config.
   """
   type: Optional[str] = None
-  randaug: RandAugment = RandAugment()
-  autoaug: AutoAugment = AutoAugment()
+  randaug: RandAugment = dataclasses.field(default_factory=RandAugment)
+  autoaug: AutoAugment = dataclasses.field(default_factory=AutoAugment)
 
 
 @dataclasses.dataclass
@@ -153,3 +157,11 @@ class TFLitePostProcessingConfig(hyperparams.Config):
   # Whether to omit the final nms placeholder op. If set to True, the output
   # will be a tuple of boxes, scores result right before the NMS operation.
   omit_nms: Optional[bool] = False
+  # The number of detections per class when using regular NMS.
+  detections_per_class: Optional[int] = 5
+  # Box scaling factors. It should agree with `box_coder_weights` defined in
+  # `DetectionGenerator`, which is in the format of [y, x, w, h].
+  y_scale: float = 1.0
+  x_scale: float = 1.0
+  w_scale: float = 1.0
+  h_scale: float = 1.0

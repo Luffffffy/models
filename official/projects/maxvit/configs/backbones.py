@@ -16,7 +16,7 @@
 import dataclasses
 from typing import Optional, Tuple
 
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.modeling import hyperparams
 from official.vision.configs import backbones
@@ -91,4 +91,4 @@ class MaxViT(hyperparams.Config):
 class Backbone(backbones.Backbone):
   """Configuration for backbones."""
   type: Optional[str] = 'maxvit'
-  maxvit: MaxViT = MaxViT()
+  maxvit: MaxViT = dataclasses.field(default_factory=MaxViT)

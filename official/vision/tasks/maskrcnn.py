@@ -19,7 +19,7 @@ from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from absl import logging
 import numpy as np
-import tensorflow as tf
+import tensorflow as tf, tf_keras
 
 from official.common import dataset_fn as dataset_fn_lib
 from official.core import base_task
@@ -35,6 +35,7 @@ from official.vision.evaluation import coco_utils
 from official.vision.evaluation import instance_metrics as metrics_lib
 from official.vision.losses import maskrcnn_losses
 from official.vision.modeling import factory
+from official.vision.utils.object_detection import visualization_utils
 
 
 def zero_out_disallowed_class_ids(batch_class_ids: tf.Tensor,
@@ -73,14 +74,14 @@ class MaskRCNNTask(base_task.Task):
   def build_model(self):
     """Builds Mask R-CNN model."""
 
-    input_specs = tf.keras.layers.InputSpec(
+    input_specs = tf_keras.layers.InputSpec(
         shape=[None] + self.task_config.model.input_size)
 
     l2_weight_decay = self.task_config.losses.l2_weight_decay
     # Divide weight decay by 2.0 to match the implementation of tf.nn.l2_loss.
     # (https://www.tensorflow.org/api_docs/python/tf/keras/regularizers/l2)
     # (https://www.tensorflow.org/api_docs/python/tf/nn/l2_loss)
-    l2_regularizer = (tf.keras.regularizers.l2(
+    l2_regularizer = (tf_keras.regularizers.l2(
         l2_weight_decay / 2.0) if l2_weight_decay else None)
 
     model = factory.build_maskrcnn(
@@ -92,13 +93,13 @@ class MaskRCNNTask(base_task.Task):
       model.backbone.trainable = False
 
     # Builds the model through warm-up call.
-    dummy_images = tf.keras.Input(self.task_config.model.input_size)
-    dummy_image_shape = tf.keras.layers.Input([2])
+    dummy_images = tf_keras.Input(self.task_config.model.input_size)
+    dummy_image_shape = tf_keras.layers.Input([2])
     _ = model(dummy_images, image_shape=dummy_image_shape, training=False)
 
     return model
 
-  def initialize(self, model: tf.keras.Model):
+  def initialize(self, model: tf_keras.Model):
     """Loads pretrained checkpoint."""
 
     if not self.task_config.init_checkpoint:
@@ -201,8 +202,10 @@ class MaskRCNNTask(base_task.Task):
     return rpn_score_loss, rpn_box_loss
 
   def _build_frcnn_losses(
-      self, outputs: Mapping[str, Any],
-      labels: Mapping[str, Any]) -> Tuple[tf.Tensor, tf.Tensor]:
+      self,
+      outputs: Mapping[str, Any],
+      labels: Mapping[str, Any],
+  ) -> Tuple[tf.Tensor, tf.Tensor]:
     """Builds losses for Fast R-CNN."""
     cascade_ious = self.task_config.model.roi_sampler.cascade_iou_thresholds
 
@@ -221,10 +224,19 @@ class MaskRCNNTask(base_task.Task):
     for cas_num in range(num_det_heads):
       frcnn_cls_loss_i = tf.reduce_mean(
           frcnn_cls_loss_fn(
-              outputs['class_outputs_{}'
-                      .format(cas_num) if cas_num else 'class_outputs'],
-              outputs['class_targets_{}'
-                      .format(cas_num) if cas_num else 'class_targets']))
+              outputs[
+                  'class_outputs_{}'.format(cas_num)
+                  if cas_num
+                  else 'class_outputs'
+              ],
+              outputs[
+                  'class_targets_{}'.format(cas_num)
+                  if cas_num
+                  else 'class_targets'
+              ],
+              self.task_config.losses.class_weights,
+          )
+      )
       frcnn_box_loss_i = tf.reduce_mean(
           frcnn_box_loss_fn(
               outputs['box_outputs_{}'.format(cas_num
@@ -256,6 +268,7 @@ class MaskRCNNTask(base_task.Task):
                    labels: Mapping[str, Any],
                    aux_losses: Optional[Any] = None) -> Dict[str, tf.Tensor]:
     """Builds Mask R-CNN losses."""
+    loss_params = self.task_config.losses
     rpn_score_loss, rpn_box_loss = self._build_rpn_losses(outputs, labels)
     frcnn_cls_loss, frcnn_box_loss = self._build_frcnn_losses(outputs, labels)
     if self.task_config.model.include_mask:
@@ -263,20 +276,20 @@ class MaskRCNNTask(base_task.Task):
     else:
       mask_loss = tf.constant(0.0, dtype=tf.float32)
 
-    params = self.task_config
     model_loss = (
-        params.losses.rpn_score_weight * rpn_score_loss +
-        params.losses.rpn_box_weight * rpn_box_loss +
-        params.losses.frcnn_class_weight * frcnn_cls_loss +
-        params.losses.frcnn_box_weight * frcnn_box_loss +
-        params.losses.mask_weight * mask_loss)
+        loss_params.rpn_score_weight * rpn_score_loss
+        + loss_params.rpn_box_weight * rpn_box_loss
+        + loss_params.frcnn_class_weight * frcnn_cls_loss
+        + loss_params.frcnn_box_weight * frcnn_box_loss
+        + loss_params.mask_weight * mask_loss
+    )
 
     total_loss = model_loss
     if aux_losses:
       reg_loss = tf.reduce_sum(aux_losses)
       total_loss = model_loss + reg_loss
 
-    total_loss = params.losses.loss_weight * total_loss
+    total_loss = loss_params.loss_weight * total_loss
     losses = {
         'total_loss': total_loss,
         'rpn_score_loss': rpn_score_loss,
@@ -338,7 +351,7 @@ class MaskRCNNTask(base_task.Task):
           'model_loss',
       ]
       return [
-          tf.keras.metrics.Mean(name, dtype=tf.float32) for name in metric_names
+          tf_keras.metrics.Mean(name, dtype=tf.float32) for name in metric_names
       ]
     else:
       if self._task_config.use_coco_metrics:
@@ -376,8 +389,8 @@ class MaskRCNNTask(base_task.Task):
 
   def train_step(self,
                  inputs: Tuple[Any, Any],
-                 model: tf.keras.Model,
-                 optimizer: tf.keras.optimizers.Optimizer,
+                 model: tf_keras.Model,
+                 optimizer: tf_keras.optimizers.Optimizer,
                  metrics: Optional[List[Any]] = None):
     """Does forward and backward.
 
@@ -416,13 +429,13 @@ class MaskRCNNTask(base_task.Task):
 
       # For mixed_precision policy, when LossScaleOptimizer is used, loss is
       # scaled for numerical stability.
-      if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+      if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
         scaled_loss = optimizer.get_scaled_loss(scaled_loss)
 
     tvars = model.trainable_variables
     grads = tape.gradient(scaled_loss, tvars)
     # Scales back gradient when LossScaleOptimizer is used.
-    if isinstance(optimizer, tf.keras.mixed_precision.LossScaleOptimizer):
+    if isinstance(optimizer, tf_keras.mixed_precision.LossScaleOptimizer):
       grads = optimizer.get_unscaled_gradients(grads)
     optimizer.apply_gradients(list(zip(grads, tvars)))
 
@@ -479,7 +492,7 @@ class MaskRCNNTask(base_task.Task):
 
   def validation_step(self,
                       inputs: Tuple[Any, Any],
-                      model: tf.keras.Model,
+                      model: tf_keras.Model,
                       metrics: Optional[List[Any]] = None):
     """Validatation step.
 
@@ -502,6 +515,14 @@ class MaskRCNNTask(base_task.Task):
     logs = {self.loss: 0}
     self._update_metrics(labels, outputs, logs)
 
+    if (
+        hasattr(self.task_config, 'allow_image_summary')
+        and self.task_config.allow_image_summary
+    ):
+      logs.update(
+          {'visualization': (tf.cast(images, dtype=tf.float32), outputs)}
+      )
+
     return logs
 
   def aggregate_logs(
@@ -511,19 +532,11 @@ class MaskRCNNTask(base_task.Task):
   ) -> Optional[Any]:
     """Optional aggregation over logs returned from a validation step."""
     if not state:
-      state = []
-      # The metrics which update state on device.
-      if self.instance_box_perclass_metrics is not None:
-        state.append(self.instance_box_perclass_metrics)
-      if self.instance_mask_perclass_metrics is not None:
-        state.append(self.instance_mask_perclass_metrics)
       # The metrics which update state on CPU.
       if self.task_config.use_coco_metrics:
         self.coco_metric.reset_states()
-        state.append(self.coco_metric)
       if self.task_config.use_wod_metrics:
         self.wod_metric.reset_states()
-        state.append(self.wod_metric)
 
     if self.task_config.use_coco_metrics:
       self.coco_metric.update_state(
@@ -535,6 +548,16 @@ class MaskRCNNTask(base_task.Task):
           step_outputs[self.wod_metric.name][0],
           step_outputs[self.wod_metric.name][1],
       )
+
+    if 'visualization' in step_outputs:
+      # Update detection state for writing summary if there are artifacts for
+      # visualization.
+      if state is None:
+        state = {}
+      state.update(visualization_utils.update_detection_state(step_outputs))
+      # TODO(allenyan): Mapping `detection_masks` (w.r.t. the `gt_boxes`) back
+      # to full masks (w.r.t. the image). Disable mask visualization fow now.
+      state.pop('detection_masks', None)
 
     if not state:
       # Create an arbitrary state to indicate it's not the first step in the
@@ -552,6 +575,10 @@ class MaskRCNNTask(base_task.Task):
     else:
       instance_metrics = self.instance_box_perclass_metrics
       prefix = ''
+    if instance_metrics is None:
+      raise ValueError(
+          'No instance metrics defined when use_masks is %s' % use_masks
+      )
     result = instance_metrics.result()
     iou_thresholds = instance_metrics.get_config()['iou_thresholds']
 
@@ -605,4 +632,12 @@ class MaskRCNNTask(base_task.Task):
       logs.update(self.coco_metric.result())
     if self.task_config.use_wod_metrics:
       logs.update(self.wod_metric.result())
+
+    # Add visualization for summary.
+    if isinstance(aggregated_logs, dict) and 'image' in aggregated_logs:
+      validation_outputs = visualization_utils.visualize_outputs(
+          logs=aggregated_logs, task_config=self.task_config
+      )
+      logs.update(validation_outputs)
+
     return logs
